@@ -1,4 +1,4 @@
-import { User, Message, InsertUser, InsertMessage } from "@shared/schema";
+import { User, Message, InsertUser, InsertMessage, users, messages } from "@shared/schema";
 import session from "express-session";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
@@ -23,6 +23,7 @@ export class DatabaseStorage implements IStorage {
     this.sessionStore = new PostgresSessionStore({
       pool,
       createTableIfMissing: true,
+      tableName: 'user_sessions' // Rename session table to avoid conflicts
     });
   }
 
