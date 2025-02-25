@@ -3,12 +3,14 @@ import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
+import LoadingBubble from "./loading-bubble";
 
 interface MessageListProps {
   messages: Message[];
+  isLoading?: boolean;
 }
 
-export default function MessageList({ messages }: MessageListProps) {
+export default function MessageList({ messages, isLoading }: MessageListProps) {
   const { user } = useAuth();
 
   return (
@@ -32,6 +34,14 @@ export default function MessageList({ messages }: MessageListProps) {
             </div>
           </Card>
         ))}
+        {isLoading && (
+          <Card className="p-4 max-w-[80%] mr-auto">
+            <div className="flex flex-col">
+              <span className="text-sm font-medium mb-1">Assistant</span>
+              <LoadingBubble />
+            </div>
+          </Card>
+        )}
       </div>
     </ScrollArea>
   );

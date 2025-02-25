@@ -54,7 +54,10 @@ export default function HomePage() {
     <div className="flex flex-col h-screen">
       <ChatHeader />
       <div className="flex-1 overflow-hidden">
-        <MessageList messages={messages} />
+        <MessageList 
+          messages={messages} 
+          isLoading={sendMessageMutation.isPending}
+        />
       </div>
       <MessageInput
         onSendMessage={handleSendMessage}
