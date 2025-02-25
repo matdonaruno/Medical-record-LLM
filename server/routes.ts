@@ -4,6 +4,7 @@ import { WebSocketServer } from "ws";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { insertMessageSchema } from "@shared/schema";
+import { generateResponse } from "./llm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
@@ -16,24 +17,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/messages", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    
+
     const parsed = insertMessageSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json(parsed.error);
     }
 
-    const message = await storage.createMessage(parsed.data);
-    
-    // Broadcast to all connected clients
-    if (wss.clients.size > 0) {
-      wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify(message));
-        }
-      });
-    }
+    // Save user message
+    const userMessage = await storage.createMessage(parsed.data);
 
-    res.status(201).json(message);
+    try {
+      // Generate LLM response
+      const content = await generateResponse(parsed.data.content);
+
+      // Save assistant message
+      const assistantMessage = await storage.createMessage({
+        content,
+        role: "assistant",
+        userId: req.user.id,
+      });
+
+      // Broadcast to all connected clients
+      if (wss.clients.size > 0) {
+        wss.clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(assistantMessage));
+          }
+        });
+      }
+
+      res.status(201).json([userMessage, assistantMessage]);
+    } catch (error) {
+      console.error("Error generating response:", error);
+      res.status(500).json({ message: "Failed to generate response" });
+    }
   });
 
   const httpServer = createServer(app);

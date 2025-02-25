@@ -15,8 +15,12 @@ export default function MessageInput({ onSendMessage, isLoading }: MessageInputP
     e.preventDefault();
     if (!message.trim() || isLoading) return;
 
-    await onSendMessage(message);
-    setMessage("");
+    try {
+      await onSendMessage(message);
+      setMessage("");
+    } catch (error) {
+      console.error("Failed to send message:", error);
+    }
   };
 
   return (
@@ -25,7 +29,7 @@ export default function MessageInput({ onSendMessage, isLoading }: MessageInputP
         <Input
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="Type a message..."
+          placeholder={isLoading ? "Waiting for response..." : "Type a message..."}
           disabled={isLoading}
         />
         <Button type="submit" disabled={isLoading || !message.trim()}>
