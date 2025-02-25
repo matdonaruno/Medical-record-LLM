@@ -4,6 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
 import LoadingBubble from "./loading-bubble";
+import { useEffect, useRef } from "react";
 
 interface MessageListProps {
   messages: Message[];
@@ -12,9 +13,18 @@ interface MessageListProps {
 
 export default function MessageList({ messages, isLoading }: MessageListProps) {
   const { user } = useAuth();
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  // Auto scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      const scrollArea = scrollAreaRef.current;
+      scrollArea.scrollTop = scrollArea.scrollHeight;
+    }
+  }, [messages, isLoading]);
 
   return (
-    <ScrollArea className="h-full p-4">
+    <ScrollArea ref={scrollAreaRef} className="h-[calc(100vh-8rem)] p-4">
       <div className="space-y-4">
         {messages.map((message) => (
           <Card
@@ -29,7 +39,7 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
               </span>
               <p className="whitespace-pre-wrap">{message.content}</p>
               <span className="text-xs opacity-70 mt-2">
-                {format(new Date(message.timestamp), "HH:mm")}
+                {format(new Date(message.timestamp), "MM/dd HH:mm")}
               </span>
             </div>
           </Card>

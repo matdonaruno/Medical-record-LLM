@@ -51,18 +51,20 @@ export default function HomePage() {
   };
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-screen bg-background">
       <ChatHeader />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden relative">
         <MessageList 
           messages={messages} 
           isLoading={sendMessageMutation.isPending}
         />
       </div>
-      <MessageInput
-        onSendMessage={handleSendMessage}
-        isLoading={sendMessageMutation.isPending}
-      />
+      <div className="border-t bg-background">
+        <MessageInput
+          onSendMessage={handleSendMessage}
+          isLoading={sendMessageMutation.isPending}
+        />
+      </div>
     </div>
   );
 }
