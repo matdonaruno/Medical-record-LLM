@@ -39,9 +39,8 @@ app.use((req, res, next) => {
 
 (async () => {
   try {
-    // Initialize LLM before starting the server
-    // Note: Model path will need to be configured when Ollama is integrated
-    await initializeLLM("path/to/model.gguf");
+    // Initialize app without model path as we'll be using Ollama
+    await initializeLLM("");
 
     const server = await registerRoutes(app);
 
@@ -59,7 +58,7 @@ app.use((req, res, next) => {
       serveStatic(app);
     }
 
-    const port = 5000;
+    const port = process.env.PORT || 5000;
     server.listen({
       port,
       host: "0.0.0.0",

@@ -6,10 +6,14 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Message } from "@shared/schema";
 import { useEffect, useState } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 export default function HomePage() {
   const { user } = useAuth();
   const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [ollamaError, setOllamaError] = useState<string | null>(null);
+  const [isModelReady, setIsModelReady] = useState(false);
 
   const { data: messages = [] } = useQuery<Message[]>({
     queryKey: ["/api/messages"],
@@ -41,6 +45,22 @@ export default function HomePage() {
 
     setSocket(ws);
 
+    // Listen for Ollama events from Electron
+    if (window.electron) {
+      window.electron.onOllamaOutput((output: string) => {
+        console.log('Ollama output:', output);
+      });
+
+      window.electron.onOllamaError((error: string) => {
+        setOllamaError(error);
+      });
+
+      window.electron.onModelReady(() => {
+        setIsModelReady(true);
+        setOllamaError(null);
+      });
+    }
+
     return () => {
       ws.close();
     };
@@ -53,6 +73,13 @@ export default function HomePage() {
   return (
     <div className="flex flex-col h-screen bg-background">
       <ChatHeader />
+      {ollamaError && (
+        <Alert variant="destructive" className="m-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{ollamaError}</AlertDescription>
+        </Alert>
+      )}
       <div className="flex-1 overflow-hidden relative">
         <MessageList 
           messages={messages} 
@@ -63,6 +90,7 @@ export default function HomePage() {
         <MessageInput
           onSendMessage={handleSendMessage}
           isLoading={sendMessageMutation.isPending}
+          disabled={!!ollamaError && !isModelReady}
         />
       </div>
     </div>
