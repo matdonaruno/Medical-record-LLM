@@ -1,32 +1,40 @@
-import { Switch, Route } from "wouter";
-import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { Route, Switch, useLocation } from "wouter";
 import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider } from "@/hooks/use-auth";
-import NotFound from "@/pages/not-found";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
+import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import HomePage from "@/pages/home-page";
-import AuthPage from "@/pages/auth-page";
-import { ProtectedRoute } from "./lib/protected-route";
+import LoginPage from "@/pages/login-page";
+import { useEffect } from "react";
 
-function Router() {
-  return (
-    <Switch>
-      <ProtectedRoute path="/" component={HomePage} />
-      <Route path="/auth" component={AuthPage} />
-      <Route component={NotFound} />
-    </Switch>
-  );
+function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user, isLoading } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      console.log("認証されていないユーザー、ログインページにリダイレクト中...");
+      setLocation("/login");
+    }
+  }, [user, isLoading, setLocation]);
+
+  if (location !== "/") return null;
+  
+  if (isLoading) return <div className="flex h-screen items-center justify-center">読み込み中...</div>;
+  
+  return user ? <Component /> : null;
 }
 
-function App() {
+export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Router />
+        <Switch>
+          <Route path="/login" component={LoginPage} />
+          <Route path="/" component={() => <ProtectedRoute component={HomePage} />} />
+        </Switch>
         <Toaster />
       </AuthProvider>
     </QueryClientProvider>
   );
 }
-
-export default App;

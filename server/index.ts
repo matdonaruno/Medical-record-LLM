@@ -37,6 +37,40 @@ app.use((req, res, next) => {
   next();
 });
 
+// 利用可能なモデルのリスト
+const availableModels = [
+  { id: 1, model_name: "llama3", display_name: "Llama 3 8B" },
+  { id: 2, model_name: "mistral", display_name: "Mistral 7B" },
+  { id: 3, model_name: "deepseek-coder:6.7b", display_name: "DeepSeek Coder 6.7B" },
+  { id: 4, model_name: "deepseek-r1:7b", display_name: "DeepSeek R1 7B" },
+  { id: 5, model_name: "deepscaler", display_name: "DeepScaler" },
+];
+
+// 現在のデフォルトモデル
+let currentModel = "deepscaler";
+
+// モデル関連のエンドポイント
+app.get("/api/models", (req, res) => {
+  res.json({ models: availableModels, currentModel: currentModel });
+});
+
+// デフォルトモデルを設定
+app.post("/api/models/default", (req, res) => {
+  const { model } = req.body;
+  if (!model) {
+    return res.status(400).json({ error: "モデル名が指定されていません" });
+  }
+  
+  const modelExists = availableModels.some(m => m.model_name === model);
+  if (!modelExists) {
+    return res.status(400).json({ error: "指定されたモデルは存在しません" });
+  }
+  
+  currentModel = model;
+  console.log(`モデルを変更しました: ${currentModel}`);
+  res.json({ success: true, currentModel });
+});
+
 (async () => {
   try {
     // Initialize app without model path as we'll be using Ollama
@@ -58,12 +92,8 @@ app.use((req, res, next) => {
       serveStatic(app);
     }
 
-    const port = process.env.PORT || 5000;
-    server.listen({
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    }, () => {
+    const port = process.env.PORT || 3000;
+    server.listen(port, () => {
       log(`serving on port ${port}`);
     });
   } catch (error) {

@@ -51,7 +51,7 @@ async function startOllama() {
 
     // Pull Llama model in background
     console.log('Pulling Llama model...');
-    const pullProcess = spawn('ollama', ['pull', 'llama2']);
+    const pullProcess = spawn('ollama', ['pull', 'llama3']);
 
     pullProcess.stdout.on('data', (data) => {
       console.log('Pull progress:', data.toString());
@@ -88,7 +88,7 @@ ipcMain.handle('ollama-generate', async (_event, message: string) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'llama2',
+        model: 'llama3',
         prompt: message,
         stream: false
       })

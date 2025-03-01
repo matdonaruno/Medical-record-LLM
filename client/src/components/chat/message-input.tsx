@@ -6,9 +6,10 @@ import { Send, Loader2 } from "lucide-react";
 interface MessageInputProps {
   onSendMessage: (content: string) => Promise<void>;
   isLoading: boolean;
+  disabled?: boolean;
 }
 
-export default function MessageInput({ onSendMessage, isLoading }: MessageInputProps) {
+export default function MessageInput({ onSendMessage, isLoading, disabled }: MessageInputProps) {
   const [message, setMessage] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,9 +31,9 @@ export default function MessageInput({ onSendMessage, isLoading }: MessageInputP
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder={isLoading ? "Waiting for response..." : "Type a message..."}
-          disabled={isLoading}
+          disabled={isLoading || disabled}
         />
-        <Button type="submit" disabled={isLoading || !message.trim()}>
+        <Button type="submit" disabled={isLoading || !message.trim() || disabled}>
           {isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (

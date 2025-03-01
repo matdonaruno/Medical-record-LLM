@@ -51,10 +51,10 @@ export function setupAuth(app: Express) {
       try {
         const user = await storage.getUserByUsername(username);
         if (!user) {
-          return done(null, false, { message: "Incorrect username." });
+          return done(null, false, { message: "ユーザー名が見つかりません。" });
         }
         if (!(await comparePasswords(password, user.password))) {
-          return done(null, false, { message: "Incorrect password." });
+          return done(null, false, { message: "パスワードが正しくありません。" });
         }
         return done(null, user);
       } catch (err) {
@@ -77,7 +77,7 @@ export function setupAuth(app: Express) {
     try {
       const existingUser = await storage.getUserByUsername(req.body.username);
       if (existingUser) {
-        return res.status(400).send("Username already exists");
+        return res.status(400).json({ message: "このユーザー名は既に使用されています。" });
       }
 
       const user = await storage.createUser({
@@ -95,10 +95,10 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err, user, info) => {
+    passport.authenticate("local", (err: Error | null, user: Express.User | false, info: { message: string } | undefined) => {
       if (err) return next(err);
       if (!user) {
-        return res.status(401).json({ message: info?.message || "Authentication failed" });
+        return res.status(401).json({ message: info?.message || "認証に失敗しました" });
       }
       req.login(user, (err) => {
         if (err) return next(err);
