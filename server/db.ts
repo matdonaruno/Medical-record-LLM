@@ -3,6 +3,10 @@ const { Pool } = pkg;
 
 import { drizzle } from 'drizzle-orm/node-postgres';
 import * as schema from "@shared/schema";
+import dotenv from 'dotenv';
+
+// 環境変数を読み込む
+dotenv.config();
 
 if (!process.env.DATABASE_URL) {
   throw new Error(

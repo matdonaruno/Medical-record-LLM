@@ -2,6 +2,10 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { initializeLLM } from "./llm";
+import dotenv from 'dotenv';
+
+// 環境変数を読み込む
+dotenv.config();
 
 const app = express();
 app.use(express.json());

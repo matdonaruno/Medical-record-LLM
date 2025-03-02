@@ -1,55 +1,11 @@
 'use client';
 
-import React from 'react';
-import { useState, useEffect, useRef } from 'react';
-
-// 一時的に簡易的なUIコンポーネントを定義
-const Button = ({ children, onClick, disabled, className = '' }) => (
-  <button 
-    onClick={onClick} 
-    disabled={disabled} 
-    className={`px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 ${className}`}
-  >
-    {children}
-  </button>
-);
-
-const Input = ({ value, onChange, placeholder, onKeyDown, disabled, className = '' }) => (
-  <input 
-    type="text" 
-    value={value} 
-    onChange={onChange} 
-    placeholder={placeholder} 
-    onKeyDown={onKeyDown} 
-    disabled={disabled} 
-    className={`px-4 py-2 border rounded w-full ${className}`}
-  />
-);
-
-const Card = ({ children, className = '' }) => (
-  <div className={`bg-white rounded-lg shadow-md ${className}`}>{children}</div>
-);
-
-const CardHeader = ({ children, className = '' }) => (
-  <div className={`p-4 border-b ${className}`}>{children}</div>
-);
-
-const CardTitle = ({ children, className = '' }) => (
-  <h2 className={`text-xl font-bold ${className}`}>{children}</h2>
-);
-
-const CardContent = ({ children, className = '' }) => (
-  <div className={`p-4 ${className}`}>{children}</div>
-);
-
-const CardFooter = ({ children, className = '' }) => (
-  <div className={`p-4 border-t ${className}`}>{children}</div>
-);
-
-type Message = {
-  role: 'user' | 'assistant';
-  content: string;
-};
+import React, { useState, useEffect, useRef } from 'react';
+import { Message } from '../types';
+import { sendChatMessage, createWebSocketClient } from '../lib/api';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from './ui/Card';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
 
 export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -60,28 +16,17 @@ export default function Chat() {
 
   // WebSocketの接続を設定
   useEffect(() => {
-    const ws = new WebSocket(`ws://${window.location.hostname}:3000`);
-    
-    ws.onopen = () => {
-      console.log('WebSocket connected');
+    const handleWebSocketMessage = (message: Message) => {
+      setMessages(prev => [...prev, message]);
+      setIsLoading(false);
     };
-    
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'response') {
-        setMessages(prev => [...prev, { role: 'assistant' as const, content: data.message }]);
-        setIsLoading(false);
-      }
-    };
-    
-    ws.onerror = (error) => {
+
+    const handleWebSocketError = (error: Event) => {
       console.error('WebSocket error:', error);
       setIsLoading(false);
     };
-    
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-    };
+
+    const ws = createWebSocketClient(handleWebSocketMessage, handleWebSocketError);
     
     setSocket(ws);
     
@@ -98,22 +43,27 @@ export default function Chat() {
   // フォールバックとしてREST APIを使用
   const sendMessageFallback = async (message: string) => {
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message }),
-      });
+      const response = await sendChatMessage(message);
       
-      if (!response.ok) {
-        throw new Error('APIリクエストに失敗しました');
+      if (response.error) {
+        throw new Error(response.error);
       }
       
-      const data = await response.json();
-      setMessages(prev => [...prev, { role: 'assistant' as const, content: data.response }]);
+      if (response.data) {
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: response.data.response,
+          timestamp: response.data.timestamp
+        }]);
+      }
     } catch (error) {
       console.error('Error sending message:', error);
+      // エラーメッセージを表示
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: 'すみません、エラーが発生しました。後でもう一度お試しください。',
+        timestamp: new Date().toISOString()
+      }]);
     } finally {
       setIsLoading(false);
     }
@@ -123,7 +73,12 @@ export default function Chat() {
   const sendMessage = () => {
     if (!input.trim() || isLoading) return;
     
-    const userMessage: Message = { role: 'user', content: input };
+    const userMessage: Message = { 
+      role: 'user', 
+      content: input,
+      timestamp: new Date().toISOString()
+    };
+    
     setMessages(prev => [...prev, userMessage]);
     setIsLoading(true);
     setInput('');
@@ -136,6 +91,14 @@ export default function Chat() {
       }));
     } else {
       sendMessageFallback(input);
+    }
+  };
+
+  // Enterキーでメッセージを送信
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
     }
   };
 
@@ -188,11 +151,15 @@ export default function Chat() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="何か質問はありますか？"
-            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+            onKeyDown={handleKeyDown}
             disabled={isLoading}
-            className="flex-1"
+            fullWidth
           />
-          <Button onClick={sendMessage} disabled={isLoading}>
+          <Button 
+            onClick={sendMessage} 
+            disabled={isLoading}
+            variant="primary"
+          >
             送信
           </Button>
         </div>
