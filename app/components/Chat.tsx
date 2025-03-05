@@ -16,6 +16,10 @@ export default function Chat() {
 
   // WebSocketの接続を設定
   useEffect(() => {
+    // 注意: 現在はclient/src/lib/websocket.tsを使用するため、このコードは無効化しています
+    console.warn('このWebSocket接続は非推奨です。client/src/lib/websocket.tsを使用してください');
+    
+    /*
     const handleWebSocketMessage = (message: Message) => {
       setMessages(prev => [...prev, message]);
       setIsLoading(false);
@@ -33,6 +37,11 @@ export default function Chat() {
     return () => {
       ws.close();
     };
+    */
+    
+    return () => {
+      // クリーンアップ
+    };
   }, []);
 
   // メッセージが追加されたら自動スクロール
@@ -49,11 +58,11 @@ export default function Chat() {
         throw new Error(response.error);
       }
       
-      if (response.data) {
+      if (response.data && response.data.response) {
         setMessages(prev => [...prev, { 
           role: 'assistant', 
           content: response.data.response,
-          timestamp: response.data.timestamp
+          timestamp: response.data.timestamp || new Date().toISOString()
         }]);
       }
     } catch (error) {

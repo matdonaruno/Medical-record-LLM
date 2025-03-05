@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { WebSocketServer } from "ws";
+import { WebSocketServer, WebSocket } from "ws";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { insertMessageSchema, insertChatSchema } from "@shared/schema";
@@ -14,6 +14,46 @@ import { z } from "zod";
 import { Message } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  const server = createServer(app);
+  
+  // WebSocketServerの設定
+  const wss = new WebSocketServer({ 
+    server,
+    path: "/api/ws"
+  });
+
+  console.log('WebSocketサーバーを初期化しました: /api/ws');
+
+  // WebSocket接続のデバッグエンドポイント
+  app.get('/api/ws-debug', (req, res) => {
+    res.json({ message: 'WebSocket endpoint is available' });
+  });
+
+  wss.on('connection', (ws, req) => {
+    console.log('新しいWebSocket接続が確立されました');
+    
+    ws.on('error', (error) => {
+      console.error('WebSocketエラー:', error);
+    });
+
+    ws.on('close', (code, reason) => {
+      console.log('WebSocket接続が閉じられました:', code, reason.toString());
+    });
+  });
+
+  // WebSocketブロードキャスト用のヘルパー関数
+  const broadcastMessage = (message: any) => {
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        try {
+          client.send(JSON.stringify(message));
+        } catch (error) {
+          console.error('WebSocketメッセージ送信エラー:', error);
+        }
+      }
+    });
+  };
+
   setupAuth(app);
 
   // チャット関連のエンドポイント
@@ -117,7 +157,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     try {
       const models = await storage.getModelSettings();
-      const currentModel = getCurrentModel();
+      const currentModel = llm.getCurrentModel();
       
       res.json({
         models,
@@ -155,7 +195,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      await setCurrentModel(modelName);
+      await llm.setCurrentModel(modelName);
       res.json({ success: true, currentModel: modelName });
     } catch (error) {
       console.error("デフォルトモデル設定エラー:", error);
@@ -291,16 +331,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`チャットタイトルを自動生成: "${newTitle}"`);
       }
 
-      // Broadcast to WebSocket clients
-      if (wss) {
-        const message = {
+      // WebSocketで通知
+      if (assistantMessage) {
+        broadcastMessage({
           type: "new_message",
           data: assistantMessage
-        };
-        wss.clients.forEach(client => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(message));
-          }
         });
       }
 
@@ -308,7 +343,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error generating response:", error);
       
-      // エラーメッセージを保存
       const errorMessage = await storage.createMessage({
         content: "申し訳ありませんが、エラーが発生しました。後でもう一度お試しください。",
         role: "assistant",
@@ -316,20 +350,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         chatId: parsed.data.chatId
       });
       
-      console.log(`エラーメッセージを保存: chatId=${parsed.data.chatId}, messageId=${errorMessage.id}`);
-      
-      // WebSocketでエラーを通知
-      if (wss) {
-        const message = {
-          type: "new_message",
-          data: errorMessage
-        };
-        wss.clients.forEach(client => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(message));
-          }
-        });
-      }
+      // WebSocketで通知
+      broadcastMessage({
+        type: "new_message",
+        data: errorMessage
+      });
       
       res.status(201).json([userMessage, errorMessage]);
     }
@@ -364,8 +389,5 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const httpServer = createServer(app);
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
-
-  return httpServer;
+  return server;
 }

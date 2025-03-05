@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import HomePage from "@/pages/home-page";
 import LoginPage from "@/pages/login-page";
 import { useEffect } from "react";
+import { connectWebSocket, closeWebSocket } from "@/lib/websocket";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -17,6 +18,13 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
       setLocation("/login");
     }
   }, [user, isLoading, setLocation]);
+
+  useEffect(() => {
+    if (user) {
+      connectWebSocket();
+      return () => closeWebSocket();
+    }
+  }, [user]);
 
   if (location !== "/") return null;
   

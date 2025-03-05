@@ -26,7 +26,7 @@ export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
-    allowedHosts: true,
+    allowedHosts: true as true,
   };
 
   const vite = await createViteServer({
@@ -68,17 +68,24 @@ export async function setupVite(app: Express, server: Server) {
       next(e);
     }
   });
+
+  // WebSocketの経路をデバッグのために追加
+  app.get('/api/ws-debug', (req, res) => {
+    res.json({ message: 'WebSocket endpoint is available' });
+  });
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(__dirname, "public");
+  // ビルドディレクトリのパスを修正（server/publicではなくdist/publicを使用）
+  const distPath = path.resolve(__dirname, "..", "dist", "public");
 
+  // 開発環境ではビルドディレクトリがなくても無視する
   if (!fs.existsSync(distPath)) {
-    throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
-    );
+    console.warn(`ビルドディレクトリが見つかりません: ${distPath}`);
+    return; // 早期リターンでエラーを回避
   }
 
+  console.log(`静的ファイルを提供するディレクトリ: ${distPath}`);
   app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist

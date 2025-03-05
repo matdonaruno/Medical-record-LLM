@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { addMessageHandler } from "@/lib/websocket";
 
 interface Chat {
   id: number;
@@ -36,7 +37,6 @@ interface Chat {
 
 export default function HomePage() {
   const { user } = useAuth();
-  const [socket, setSocket] = useState<WebSocket | null>(null);
   const [ollamaError, setOllamaError] = useState<string | null>(null);
   const [isModelReady, setIsModelReady] = useState(false);
   const [modelName, setModelName] = useState<string>("llama3");
@@ -52,6 +52,32 @@ export default function HomePage() {
   const resizeRef = useRef<HTMLDivElement>(null);
 
   const queryClient = useQueryClient();
+
+  // WebSocketメッセージハンドラーを設定
+  useEffect(() => {
+    const removeHandler = addMessageHandler((message) => {
+      if (message.type === "new_message") {
+        queryClient.invalidateQueries({ queryKey: ["/api/messages", currentChatId] });
+      }
+    });
+
+    return () => removeHandler();
+  }, [currentChatId, queryClient]);
+
+  // システムプロンプトを設定
+  useEffect(() => {
+    const setJapaneseSystemPrompt = async () => {
+      try {
+        await apiRequest("POST", "/api/system-prompt", {
+          content: "あなたは医療現場のパソコン業務を支援する日本語AIアシスタントです。常に日本語で回答してください。信頼性の低いものやわからないものは'よくわかりません'と回答してください。"
+        });
+      } catch (error) {
+        console.error("システムプロンプトの設定に失敗しました:", error);
+      }
+    };
+    
+    setJapaneseSystemPrompt();
+  }, []);
 
   // ユーザーが変わった時にチャットデータをリセット
   useEffect(() => {
@@ -189,57 +215,6 @@ export default function HomePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/messages", currentChatId] });
     },
   });
-
-  useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    const ws = new WebSocket(wsUrl);
-
-    ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      queryClient.invalidateQueries({ queryKey: ["/api/messages", currentChatId] });
-    };
-
-    setSocket(ws);
-
-    // Listen for Ollama events from Electron
-    const electron = (window as any).electron;
-    if (electron) {
-      electron.onOllamaOutput((output: string) => {
-        console.log('Ollama output:', output);
-      });
-
-      electron.onOllamaError((error: string) => {
-        setOllamaError(error);
-      });
-
-      electron.onModelReady(() => {
-        setIsModelReady(true);
-        setOllamaError(null);
-        // モデル名を取得
-        electron.getModelName((name: string) => {
-          setModelName(name || "llama3");
-        });
-      });
-    }
-
-    // システムプロンプトを日本語に設定
-    const setJapaneseSystemPrompt = async () => {
-      try {
-        await apiRequest("POST", "/api/system-prompt", {
-          content: "あなたは医療現場のパソコン業務を支援する日本語AIアシスタントです。常に日本語で回答してください。信頼性の低いものやわからないものは'よくわかりません'と回答してください。"
-        });
-      } catch (error) {
-        console.error("システムプロンプトの設定に失敗しました:", error);
-      }
-    };
-    
-    setJapaneseSystemPrompt();
-
-    return () => {
-      ws.close();
-    };
-  }, [currentChatId]);
 
   const handleSendMessage = async (content: string) => {
     await sendMessageMutation.mutateAsync(content);

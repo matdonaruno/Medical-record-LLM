@@ -128,7 +128,7 @@ export class DatabaseStorage implements IStorage {
   async getDefaultModel(): Promise<string> {
     const result = await pool.query('SELECT model_name FROM model_settings WHERE is_default = true LIMIT 1');
     if (result.rows.length === 0) {
-      return 'llama3'; // デフォルトのフォールバック
+      return 'llama3:latest'; // デフォルトのフォールバック
     }
     return result.rows[0].model_name;
   }

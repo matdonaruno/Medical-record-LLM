@@ -46,13 +46,17 @@ export async function sendChatMessage(message: string): Promise<ApiResponse<Chat
 
 /**
  * WebSocketクライアントを作成する
+ * 注意: 現在は使用しないでください - client/src/lib/websocket.tsを使用してください
  */
 export function createWebSocketClient(
   onMessage: (message: Message) => void,
   onError: (error: Event) => void
 ): WebSocket {
+  console.warn('この関数は非推奨です。client/src/lib/websocket.tsを使用してください');
+  
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${window.location.host}/ws`;
+  const host = window.location.host || 'localhost:3000';
+  const wsUrl = `${protocol}//${host}/api/ws`;
   const ws = new WebSocket(wsUrl);
   
   ws.onmessage = (event) => {
