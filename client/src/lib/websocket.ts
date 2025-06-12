@@ -21,16 +21,18 @@ export function connectWebSocket() {
   }
 
   try {
-    // WebSocketのURLを構築
+    // WebSocketのURLを動的に構築
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Electronモードでは常にlocalhostの3000ポートを使用
     let host = window.location.host;
     
-    // ポート3001の場合は3000に変更（ElectronのポートミスマッチFix）
-    if (host.includes(':3001')) {
-      host = host.replace(':3001', ':3000');
-    } else if (!host.includes(':')) {
-      host = 'localhost:3000';
+    // Electronモードの検出
+    const isElectron = window.navigator.userAgent.includes('Electron');
+    
+    // ポートが明示されていない場合、デフォルトポートを使用
+    if (!host.includes(':')) {
+      // ElectronアプリまたはWebサーバーが動作する標準ポートを推測
+      const defaultPort = isElectron ? '3000' : window.location.port || '3001';
+      host = `${window.location.hostname}:${defaultPort}`;
     }
     
     const wsUrl = `${protocol}//${host}/api/ws`;

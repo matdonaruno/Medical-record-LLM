@@ -43,7 +43,12 @@ export async function registerRoutes(app: Express, server?: Server): Promise<Ser
   });
 
   // WebSocketブロードキャスト用のヘルパー関数
-  const broadcastMessage = (message: any) => {
+  interface WebSocketMessage {
+    type: string;
+    data: Message;
+  }
+
+  const broadcastMessage = (message: WebSocketMessage) => {
     wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         try {
@@ -256,22 +261,31 @@ export async function registerRoutes(app: Express, server?: Server): Promise<Ser
     }
   });
 
-  app.post("/api/messages", async (req, res) => {
+  // Message processing helper functions
+  type ValidationResult = {
+    success: true;
+    data: { content: string; role: string; userId: number; chatId?: number };
+  } | {
+    success: false;
+    error: { status: number; data?: any };
+  };
+
+  async function validateMessageRequest(req: Request): Promise<ValidationResult> {
     if (!req.isAuthenticated()) {
       console.log("未認証ユーザーがメッセージを送信しようとしました");
-      return res.sendStatus(401);
+      return { success: false, error: { status: 401 } };
     }
 
     const parsed = insertMessageSchema.safeParse(req.body);
     if (!parsed.success) {
       console.log("無効なメッセージデータ:", parsed.error);
-      return res.status(400).json(parsed.error);
+      return { success: false, error: { status: 400, data: parsed.error } };
     }
 
     // ユーザーIDが一致するか確認
     if (parsed.data.userId !== req.user.id) {
       console.log(`ユーザーIDの不一致: リクエスト=${parsed.data.userId}, セッション=${req.user.id}`);
-      return res.status(403).json({ message: "Unauthorized: User ID mismatch" });
+      return { success: false, error: { status: 403, data: { message: "Unauthorized: User ID mismatch" } } };
     }
 
     // チャットIDが指定されている場合、そのチャットの所有者か確認
@@ -279,84 +293,108 @@ export async function registerRoutes(app: Express, server?: Server): Promise<Ser
       const chat = await storage.getChat(parsed.data.chatId);
       if (!chat) {
         console.log(`チャットID ${parsed.data.chatId} が見つかりません`);
-        return res.status(404).json({ message: "Chat not found" });
+        return { success: false, error: { status: 404, data: { message: "Chat not found" } } };
       }
       
       if (chat.userId !== req.user.id) {
         console.log(`ユーザーID ${req.user.id} はチャットID ${parsed.data.chatId} にメッセージを送信する権限がありません（所有者: ${chat.userId}）`);
-        return res.status(403).json({ message: "Unauthorized: Not chat owner" });
+        return { success: false, error: { status: 403, data: { message: "Unauthorized: Not chat owner" } } };
       }
     }
 
-    console.log(`メッセージ送信リクエスト: chatId=${parsed.data.chatId}, userId=${req.user.id}`);
+    return { success: true, data: parsed.data };
+  }
 
-    // Save user message
-    const userMessage = await storage.createMessage(parsed.data);
+  interface MessageData {
+    content: string;
+    role: string;
+    userId: number;
+    chatId?: number;
+  }
 
-    // Get chat history
-    let messages: Message[] = [];
-    if (parsed.data.chatId) {
-      messages = await storage.getMessagesByChat(parsed.data.chatId);
-    } else {
-      messages = await storage.getMessagesByUser(req.user.id);
+  async function createUserMessageAndGetHistory(messageData: MessageData): Promise<{ userMessage: Message; messages: Message[] }> {
+    console.log(`メッセージ送信リクエスト: chatId=${messageData.chatId}, userId=${messageData.userId}`);
+
+    const userMessage = await storage.createMessage(messageData);
+
+    const messages = messageData.chatId 
+      ? await storage.getMessagesByChat(messageData.chatId)
+      : await storage.getMessagesByUser(messageData.userId);
+
+    return { userMessage, messages };
+  }
+
+  async function generateAssistantResponse(messages: Message[], userId: number, chatId?: number): Promise<Message> {
+    const currentModel = await storage.getDefaultModel();
+    console.log(`LLMリクエスト: ${messages.length}件のメッセージ履歴を含む`);
+    console.log(`使用モデル: ${currentModel}`);
+
+    const assistantContent = await llm.generateResponse(messages, currentModel);
+    
+    const assistantMessage = await storage.createMessage({
+      content: assistantContent,
+      role: "assistant",
+      userId,
+      chatId
+    });
+    
+    console.log(`アシスタントメッセージを保存: chatId=${chatId}, messageId=${assistantMessage.id}`);
+    return assistantMessage;
+  }
+
+  async function updateChatTitleIfNeeded(chatId: number | undefined, messages: Message[], userContent: string): Promise<void> {
+    if (chatId && messages.length <= 3) {
+      const truncatedContent = userContent.length > 20 
+        ? userContent.substring(0, 20) + "..." 
+        : userContent;
+      const currentModel = await storage.getDefaultModel();
+      const newTitle = `${truncatedContent} (${currentModel})`;
+      
+      await storage.updateChatTitle(chatId, newTitle);
+      console.log(`チャットタイトルを自動生成: "${newTitle}"`);
     }
+  }
+
+  async function handleMessageError(error: Error | unknown, userId: number, chatId?: number): Promise<Message> {
+    console.error("Error generating response:", error);
+    
+    const errorMessage = await storage.createMessage({
+      content: "申し訳ありませんが、エラーが発生しました。後でもう一度お試しください。",
+      role: "assistant",
+      userId,
+      chatId
+    });
+    
+    broadcastMessage({
+      type: "new_message",
+      data: errorMessage
+    });
+    
+    return errorMessage;
+  }
+
+  app.post("/api/messages", async (req, res) => {
+    const validation = await validateMessageRequest(req);
+    if (!validation.success) {
+      const { status, data } = validation.error;
+      return data ? res.status(status).json(data) : res.sendStatus(status);
+    }
+
+    const { userMessage, messages } = await createUserMessageAndGetHistory(validation.data);
 
     try {
-      // Get current model from storage
-      const currentModel = await storage.getDefaultModel();
-      console.log(`LLMリクエスト: ${messages.length}件のメッセージ履歴を含む`);
-      console.log(`使用モデル: ${currentModel}`);
-
-      // Generate response
-      const assistantContent = await llm.generateResponse(messages, currentModel);
+      const assistantMessage = await generateAssistantResponse(messages, req.user.id, validation.data.chatId);
       
-      // Save assistant message
-      const assistantMessage = await storage.createMessage({
-        content: assistantContent,
-        role: "assistant",
-        userId: req.user.id,
-        chatId: parsed.data.chatId
+      await updateChatTitleIfNeeded(validation.data.chatId, messages, validation.data.content);
+
+      broadcastMessage({
+        type: "new_message",
+        data: assistantMessage
       });
-      
-      console.log(`アシスタントメッセージを保存: chatId=${parsed.data.chatId}, messageId=${assistantMessage.id}`);
-
-      // If this is the first message in a chat, update the chat title
-      if (parsed.data.chatId && messages.length <= 3) {
-        const userContent = parsed.data.content;
-        const truncatedContent = userContent.length > 20 
-          ? userContent.substring(0, 20) + "..." 
-          : userContent;
-        const newTitle = `${truncatedContent} (${currentModel})`;
-        
-        await storage.updateChatTitle(parsed.data.chatId, newTitle);
-        console.log(`チャットタイトルを自動生成: "${newTitle}"`);
-      }
-
-      // WebSocketで通知
-      if (assistantMessage) {
-        broadcastMessage({
-          type: "new_message",
-          data: assistantMessage
-        });
-      }
 
       res.status(201).json([userMessage, assistantMessage]);
     } catch (error) {
-      console.error("Error generating response:", error);
-      
-      const errorMessage = await storage.createMessage({
-        content: "申し訳ありませんが、エラーが発生しました。後でもう一度お試しください。",
-        role: "assistant",
-        userId: req.user.id,
-        chatId: parsed.data.chatId
-      });
-      
-      // WebSocketで通知
-      broadcastMessage({
-        type: "new_message",
-        data: errorMessage
-      });
-      
+      const errorMessage = await handleMessageError(error, req.user.id, validation.data.chatId);
       res.status(201).json([userMessage, errorMessage]);
     }
   });

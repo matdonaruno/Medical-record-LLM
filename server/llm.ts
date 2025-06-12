@@ -1,8 +1,7 @@
 import fetch from 'node-fetch';
 import { storage } from './storage';
 import { Message } from "@shared/schema";
-
-const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
+import { config } from './config';
 // デフォルトモデルはストレージから動的に取得
 let currentModelName = process.env.OLLAMA_MODEL || 'llama3:latest';
 
@@ -29,7 +28,7 @@ export async function setCurrentModel(modelName: string) {
 
 async function checkOllamaConnection(): Promise<boolean> {
   try {
-    const response = await fetch(`${OLLAMA_API_URL}/api/tags`);
+    const response = await fetch(`${config.ollama.baseUrl}/api/tags`);
     if (!response.ok) {
       throw new Error(`Ollama API connection failed: ${response.statusText}`);
     }
@@ -116,11 +115,11 @@ export async function generateResponse(messages: Message[], model: string = curr
 
     // システムメッセージを追加
     formattedMessages.unshift({
-      role: 'system' as any, // Ollamaのシステムメッセージ用
+      role: 'system' as const, // Ollamaのシステムメッセージ用
       content: systemPrompt
     });
 
-    const response = await fetch(`${OLLAMA_API_URL}/api/chat`, {
+    const response = await fetch(`${config.ollama.baseUrl}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -158,7 +157,7 @@ export async function generateResponse(messages: Message[], model: string = curr
 // Ollamaから利用可能なモデル一覧を取得
 export async function getAvailableModels() {
   try {
-    const response = await fetch(`${OLLAMA_API_URL}/api/tags`);
+    const response = await fetch(`${config.ollama.baseUrl}/api/tags`);
     if (!response.ok) {
       throw new Error(`Ollama API error: ${response.statusText}`);
     }
@@ -166,7 +165,14 @@ export async function getAvailableModels() {
     const data = await response.json();
     
     // Ollamaのレスポンス形式: { models: [{ name, model, modified_at, size, ... }] }
-    return data.models.map((model: any, index: number) => ({
+    interface OllamaModel {
+      name: string;
+      model?: string;
+      modified_at?: string;
+      size?: number;
+    }
+
+    return data.models.map((model: OllamaModel, index: number) => ({
       id: index + 1,
       model_name: model.name,
       display_name: getDisplayName(model.name),

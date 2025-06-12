@@ -1,8 +1,6 @@
 {
   "appId": "com.medical.record.llm",
   "productName": "Medical Record LLM",
-  "description": "医療現場のパソコン業務を支援するローカルLLMチャットアプリケーション",
-  "version": "1.0.0",
   "copyright": "Copyright © 2024",
   "directories": {
     "output": "dist-electron",

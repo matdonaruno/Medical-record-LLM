@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { initializeLLM, getAvailableModels } from "./llm";
+import { config, validateConfig, logConfig } from "./config";
 import dotenv from 'dotenv';
 import { storage } from "./storage";
 import { createServer } from "http";
@@ -9,12 +10,15 @@ import { createServer } from "http";
 // 環境変数を読み込む
 dotenv.config();
 
+// 設定の妥当性チェック
+validateConfig();
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// ポート設定
-const PORT = process.env.PORT || 3001;
+// ポート設定（統一管理）
+const PORT = config.server.port;
 
 // HTTPサーバーを作成
 const httpServer = createServer(app);
@@ -22,7 +26,7 @@ const httpServer = createServer(app);
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse: Record<string, unknown> | undefined = undefined;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -75,7 +79,13 @@ app.post("/api/models/default", async (req, res) => {
   try {
     // Ollamaから利用可能なモデルを取得して存在確認
     const availableModels = await getAvailableModels();
-    const modelExists = availableModels.some((m: any) => m.model_name === modelName);
+    interface ModelInfo {
+      model_name: string;
+      display_name: string;
+      size: string;
+    }
+
+    const modelExists = (availableModels as ModelInfo[]).some((m) => m.model_name === modelName);
     
     if (!modelExists) {
       return res.status(400).json({ error: "指定されたモデルは存在しません" });
@@ -128,9 +138,12 @@ async function initializeApp() {
     httpServer.listen(PORT, () => {
       console.log(`${new Date().toLocaleTimeString()} [express] serving on port ${PORT}`);
       
+      // 設定情報をログ出力
+      logConfig();
+      
       // Electronモードでない場合はブラウザで開く
       if (!isElectronMode) {
-        console.log(`Open browser: http://localhost:${PORT}`);
+        console.log(`Open browser: http://${config.server.host}:${PORT}`);
       }
     });
   } catch (error) {

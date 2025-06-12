@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
-import path from 'path';
-import { spawn, exec } from 'child_process';
-import fs from 'fs';
+import * as path from 'path';
+import { spawn, exec, ChildProcess } from 'child_process';
+import * as fs from 'fs';
 
 // 開発モードの判定を手動で行う
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -9,10 +9,25 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 // Node.js 18以降のfetchを使用、またはnode-fetchをフォールバック
 const fetch = globalThis.fetch || require('node-fetch').default;
 
+// Electron設定（環境変数から取得）
+const electronConfig = {
+  server: {
+    port: parseInt(process.env.PORT || '3001'),
+    host: process.env.HOST || 'localhost',
+  },
+  ollama: {
+    host: process.env.OLLAMA_HOST || '127.0.0.1',
+    port: parseInt(process.env.OLLAMA_PORT || '11434'),
+    get baseUrl() {
+      return `http://${this.host}:${this.port}`;
+    },
+  },
+};
+
 let mainWindow: BrowserWindow | null = null;
-let ollamaProcess: any = null;
-let expressServer: any = null;
-let serverPort = 3000;
+let ollamaProcess: ChildProcess | null = null;
+let expressServer: ChildProcess | null = null;
+let serverPort = electronConfig.server.port;
 
 // Ollamaバイナリのパスを取得
 function getOllamaPath(): string {
@@ -94,8 +109,8 @@ function createWindow() {
 
   // サーバー起動後にロード
   setTimeout(() => {
-    // 実際のサーバーは3000ポートで動作するため固定
-    mainWindow?.loadURL(`http://localhost:3000`);
+    // 設定されたサーバーURLを使用
+    mainWindow?.loadURL(`http://${electronConfig.server.host}:${electronConfig.server.port}`);
     if (isDev) {
       mainWindow?.webContents.openDevTools();
     }
@@ -170,7 +185,7 @@ async function startOllama() {
     const env = {
       ...process.env,
       OLLAMA_MODELS: modelsPath,
-      OLLAMA_HOST: '127.0.0.1:11434'
+      OLLAMA_HOST: `${electronConfig.ollama.host}:${electronConfig.ollama.port}`
     };
 
     console.log('Starting Ollama service...');
@@ -220,7 +235,7 @@ async function startOllama() {
 // Ollamaの起動確認
 async function checkOllamaRunning(): Promise<boolean> {
   try {
-    const response = await fetch('http://127.0.0.1:11434/api/tags');
+    const response = await fetch(`${electronConfig.ollama.baseUrl}/api/tags`);
     return response.ok;
   } catch {
     return false;
@@ -273,7 +288,7 @@ ipcMain.handle('select-model-file', async () => {
 
 ipcMain.handle('get-available-models', async () => {
   try {
-    const response = await fetch('http://127.0.0.1:11434/api/tags');
+    const response = await fetch(`${electronConfig.ollama.baseUrl}/api/tags`);
     if (!response.ok) {
       throw new Error('Failed to fetch models');
     }
@@ -286,7 +301,7 @@ ipcMain.handle('get-available-models', async () => {
 });
 
 // 利用可能な空きポートを見つける
-async function findAvailablePort(startPort: number = 3000): Promise<number> {
+async function findAvailablePort(startPort: number = electronConfig.server.port): Promise<number> {
   return new Promise((resolve) => {
     const server = require('net').createServer();
     server.listen(startPort, () => {
