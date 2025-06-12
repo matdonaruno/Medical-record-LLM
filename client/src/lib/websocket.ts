@@ -8,6 +8,8 @@ type WebSocketMessage = {
 // グローバルWebSocketインスタンス
 let ws: WebSocket | null = null;
 const messageHandlers: ((message: WebSocketMessage) => void)[] = [];
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
 
 // WebSocket接続を確立する関数
 export function connectWebSocket() {
@@ -21,7 +23,16 @@ export function connectWebSocket() {
   try {
     // WebSocketのURLを構築
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host || 'localhost:3000';
+    // Electronモードでは常にlocalhostの3000ポートを使用
+    let host = window.location.host;
+    
+    // ポート3001の場合は3000に変更（ElectronのポートミスマッチFix）
+    if (host.includes(':3001')) {
+      host = host.replace(':3001', ':3000');
+    } else if (!host.includes(':')) {
+      host = 'localhost:3000';
+    }
+    
     const wsUrl = `${protocol}//${host}/api/ws`;
 
     console.log('WebSocket接続を開始:', wsUrl);
@@ -30,6 +41,7 @@ export function connectWebSocket() {
     // 接続イベントハンドラ
     ws.onopen = () => {
       console.log('WebSocket接続が確立されました');
+      reconnectAttempts = 0; // 接続成功でリセット
     };
 
     // メッセージ受信ハンドラ
@@ -52,11 +64,18 @@ export function connectWebSocket() {
       console.log('WebSocket接続が閉じられました:', event.code, event.reason);
       ws = null;
       
-      // 3秒後に再接続を試みる
-      setTimeout(() => {
-        console.log('WebSocket再接続を試みます');
-        connectWebSocket();
-      }, 3000);
+      // 意図的な切断以外の場合のみ再接続を試みる
+      if (event.code !== 1000 && event.code !== 1001 && reconnectAttempts < maxReconnectAttempts) {
+        reconnectAttempts++;
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // 指数バックオフ
+        
+        console.log(`WebSocket再接続を試みます (${reconnectAttempts}/${maxReconnectAttempts}) - ${delay}ms後`);
+        setTimeout(() => {
+          connectWebSocket();
+        }, delay);
+      } else if (reconnectAttempts >= maxReconnectAttempts) {
+        console.log('WebSocket再接続の試行回数が上限に達しました。チャット機能はWebSocketなしで継続します。');
+      }
     };
   } catch (error) {
     console.error('WebSocket接続の作成に失敗しました:', error);

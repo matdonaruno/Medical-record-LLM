@@ -15,8 +15,9 @@ import {
 interface ModelSettings {
   id: number;
   model_name: string;
-  is_default: boolean;
-  created_at: string;
+  display_name: string;
+  size?: string;
+  modified_at?: string;
 }
 
 interface ModelsResponse {
@@ -79,7 +80,10 @@ export default function ChatHeader() {
               <SelectContent>
                 {modelsData.models.map((model) => (
                   <SelectItem key={model.id} value={model.model_name}>
-                    {model.model_name}
+                    <div className="flex flex-col">
+                      <span>{model.display_name}</span>
+                      <span className="text-xs text-gray-500">{model.model_name}</span>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>

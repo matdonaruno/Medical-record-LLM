@@ -13,12 +13,13 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { z } from "zod";
 import { Message } from "@shared/schema";
 
-export async function registerRoutes(app: Express): Promise<Server> {
-  const server = createServer(app);
+export async function registerRoutes(app: Express, server?: Server): Promise<Server> {
+  // 既存のサーバーがあれば使用、なければ新規作成
+  const httpServer = server || createServer(app);
   
   // WebSocketServerの設定
   const wss = new WebSocketServer({ 
-    server,
+    server: httpServer,
     path: "/api/ws"
   });
 
@@ -389,5 +390,5 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  return server;
+  return httpServer;
 }

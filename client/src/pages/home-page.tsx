@@ -2,6 +2,7 @@ import { useAuth } from "@/hooks/use-auth";
 import ChatHeader from "@/components/chat/chat-header";
 import MessageList from "@/components/chat/message-list";
 import MessageInput from "@/components/chat/message-input";
+import { ModelManager } from "@/components/model-manager";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Message } from "@shared/schema";
 import { useEffect, useState, useRef } from "react";
@@ -35,6 +36,17 @@ interface Chat {
   userId: number;
 }
 
+interface ModelsResponse {
+  models: Array<{
+    id: number;
+    model_name: string;
+    display_name: string;
+    size?: string;
+    modified_at?: string;
+  }>;
+  currentModel: string;
+}
+
 export default function HomePage() {
   const { user } = useAuth();
   const [ollamaError, setOllamaError] = useState<string | null>(null);
@@ -52,6 +64,20 @@ export default function HomePage() {
   const resizeRef = useRef<HTMLDivElement>(null);
 
   const queryClient = useQueryClient();
+
+  // モデル情報を取得
+  const { data: modelsData } = useQuery<ModelsResponse>({
+    queryKey: ["/api/models"],
+    refetchInterval: 30000, // 30秒ごとに更新
+  });
+
+  // モデル情報が更新されたときに状態を同期
+  useEffect(() => {
+    if (modelsData) {
+      setModelName(modelsData.currentModel);
+      setCurrentModel(modelsData.currentModel);
+    }
+  }, [modelsData]);
 
   // WebSocketメッセージハンドラーを設定
   useEffect(() => {
@@ -286,13 +312,35 @@ export default function HomePage() {
         className="border-r overflow-auto flex flex-col" 
         style={{ width: `${sidebarWidth}px` }}
       >
-        <div className="p-4 font-semibold">患者治療や患者情報に関連することには使用しない。</div>
-        <div className="p-4 font-semibold">信頼性が低い回答を出します。</div>
+        {/* 可愛い注意メッセージ */}
+        <div className="p-4 m-2 bg-gradient-to-r from-pink-50 to-purple-50 border-2 border-pink-200 rounded-xl shadow-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-2xl">🌟</span>
+            <span className="text-pink-600 font-bold text-sm">大切なお知らせ</span>
+            <span className="text-2xl">🌟</span>
+          </div>
+          <div className="space-y-2 text-xs text-gray-600">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🚫</span>
+              <span>患者治療や患者情報に関連することには使用しないでください</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-lg">⚠️</span>
+              <span>信頼性が低い回答を出すことがあります</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-lg">💡</span>
+              <span className="text-purple-600 font-medium">業務支援目的でご利用ください</span>
+            </div>
+          </div>
+        </div>
         <button 
-          className="m-4 p-2 bg-black text-white rounded hover:bg-gray-600"
+          className="m-4 p-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all duration-200 transform hover:scale-105 shadow-lg flex items-center justify-center gap-2 font-medium"
           onClick={handleCreateNewChat}
         >
+          <span className="text-lg">💬</span>
           新しいチャット
+          <span className="text-lg">✨</span>
         </button>
         <ul className="flex-1 overflow-auto">
           {chats.map((chat) => (
@@ -326,17 +374,23 @@ export default function HomePage() {
             </li>
           ))}
         </ul>
-        <div className="p-4 border-t text-sm text-gray-500 flex items-center">
-          <img 
-            src="/ollama-logo.png" 
-            alt="Ollama" 
-            className="w-6 h-auto mr-2 object-contain" 
-            onError={(e) => {
-              // 画像が見つからない場合は代替テキストを表示
-              e.currentTarget.style.display = 'none';
-            }}
-          />
-          <span>使用中のモデル: {modelName}</span>
+        <div className="p-4 border-t space-y-2">
+          <div className="text-sm text-gray-500 flex items-center">
+            <img 
+              src="/ollama-logo.png" 
+              alt="Ollama" 
+              className="w-6 h-auto mr-2 object-contain" 
+              onError={(e) => {
+                // 画像が見つからない場合は代替テキストを表示
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+            <span>使用中のモデル: {(() => {
+              const currentModelInfo = modelsData?.models.find(m => m.model_name === modelName);
+              return currentModelInfo ? currentModelInfo.display_name : modelName;
+            })()}</span>
+          </div>
+          <ModelManager />
         </div>
       </div>
       

@@ -1,6 +1,10 @@
 {
-  "name": "rest-express",
+  "name": "medical-record-llm",
+  "productName": "Medical Record LLM",
   "version": "1.0.0",
+  "description": "医療現場のパソコン業務を支援するローカルLLMチャットアプリケーション",
+  "main": "dist/electron/main.cjs",
+  "homepage": ".",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -8,7 +12,17 @@
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "electron": "electron electron/main.ts",
+    "electron:dev": "npm run electron:build:dev && concurrently --kill-others \"npm run server:electron\" \"npm run electron:wait\"",
+    "electron:build:dev": "tsc electron/main.ts --outDir dist/electron --target es2020 --module commonjs --esModuleInterop --allowSyntheticDefaultImports --skipLibCheck && tsc electron/preload.ts --outDir dist/electron --target es2020 --module commonjs --esModuleInterop --allowSyntheticDefaultImports --skipLibCheck && mv dist/electron/main.js dist/electron/main.cjs && mv dist/electron/preload.js dist/electron/preload.cjs",
+    "server:electron": "cross-env ELECTRON_MODE=true tsx server/index.ts",
+    "electron:wait": "wait-on http://localhost:3000 && electron dist/electron/main.cjs",
+    "electron:build": "npm run build && tsc electron/main.ts --outDir dist/electron && tsc electron/preload.ts --outDir dist/electron",
+    "dist": "npm run electron:build && electron-builder",
+    "dist:win": "npm run electron:build && electron-builder --win",
+    "dist:mac": "npm run electron:build && electron-builder --mac",
+    "dist:linux": "npm run electron:build && electron-builder --linux"
   },
   "dependencies": {
     "@electron/remote": "^2.1.2",
@@ -47,13 +61,13 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
     "connect-pg-simple": "^10.0.0",
+    "cross-env": "^7.0.3",
     "date-fns": "^3.6.0",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.39.1",
     "drizzle-zod": "^0.7.0",
     "electron": "^34.2.0",
     "electron-builder": "^25.1.8",
-    "electron-is-dev": "^3.0.1",
     "embla-carousel-react": "^8.3.0",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
@@ -98,13 +112,15 @@
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^4.3.2",
     "autoprefixer": "^10.4.20",
+    "concurrently": "^8.2.2",
     "drizzle-kit": "^0.30.4",
     "esbuild": "^0.25.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "tsx": "^4.19.1",
     "typescript": "5.6.3",
-    "vite": "^5.4.14"
+    "vite": "^5.4.14",
+    "wait-on": "^7.2.0"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"

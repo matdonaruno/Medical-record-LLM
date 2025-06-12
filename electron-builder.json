@@ -1,20 +1,106 @@
 {
-  "appId": "com.local.llm.chat",
-  "productName": "Local LLM Chat",
+  "appId": "com.medical.record.llm",
+  "productName": "Medical Record LLM",
+  "description": "医療現場のパソコン業務を支援するローカルLLMチャットアプリケーション",
+  "version": "1.0.0",
+  "copyright": "Copyright © 2024",
   "directories": {
-    "output": "dist-electron"
+    "output": "dist-electron",
+    "buildResources": "build"
   },
   "files": [
     "dist/**/*",
-    "electron/**/*"
+    "electron/**/*",
+    "server/**/*",
+    "shared/**/*",
+    "node_modules/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "resources/",
+      "to": ".",
+      "filter": ["**/*"]
+    }
   ],
   "mac": {
-    "category": "public.app-category.productivity"
+    "category": "public.app-category.productivity",
+    "icon": "build/icon.icns",
+    "target": [
+      {
+        "target": "dmg",
+        "arch": ["x64", "arm64"]
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "resources/bin/ollama-darwin",
+        "to": "bin/ollama"
+      }
+    ]
   },
   "win": {
-    "target": "nsis"
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "build/icon.ico",
+    "extraResources": [
+      {
+        "from": "resources/bin/ollama.exe",
+        "to": "bin/ollama.exe"
+      }
+    ],
+    "requestedExecutionLevel": "asInvoker",
+    "artifactName": "${productName}-${version}-Setup.${ext}"
   },
   "linux": {
-    "target": "AppImage"
-  }
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "build/icon.png",
+    "category": "Office",
+    "extraResources": [
+      {
+        "from": "resources/bin/ollama-linux",
+        "to": "bin/ollama"
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico",
+    "artifactName": "${productName}-${version}-Setup.${ext}",
+    "shortcutName": "${productName}",
+    "include": "build/installer.nsh",
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "displayLanguageSelector": true,
+    "license": "LICENSE.txt"
+  },
+  "dmg": {
+    "title": "${productName} ${version}",
+    "artifactName": "${productName}-${version}.${ext}",
+    "background": "build/background.png",
+    "contents": [
+      {
+        "x": 110,
+        "y": 150
+      },
+      {
+        "x": 240,
+        "y": 150,
+        "type": "link",
+        "path": "/Applications"
+      }
+    ]
+  },
+  "publish": null
 }

@@ -24,7 +24,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const res = await apiRequest("GET", "/api/user");
+        const res = await fetch("/api/user", {
+          credentials: "include",
+        });
         if (res.ok) {
           const userData = await res.json();
           setUser(userData);
@@ -47,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ username, password }),
+        credentials: "include", // セッションクッキーを含める
       });
 
       if (!res.ok) {
@@ -69,7 +72,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (username: string, password: string) => {
     try {
-      const res = await apiRequest("POST", "/api/register", { username, password });
+      const res = await fetch("/api/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+        credentials: "include", // セッションクッキーを含める
+      });
       
       if (!res.ok) {
         const errorData = await res.json();
@@ -78,6 +88,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       const userData = await res.json();
       setUser(userData);
+      
+      // 登録成功時にキャッシュをクリア
+      queryClient.clear();
+      
       return userData;
     } catch (error) {
       console.error("登録エラー:", error);
