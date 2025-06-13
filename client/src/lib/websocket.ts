@@ -26,12 +26,14 @@ export function connectWebSocket() {
     let host = window.location.host;
     
     // Electronモードの検出
-    const isElectron = window.navigator.userAgent.includes('Electron');
+    const isElectron = (window as any).electronAPI !== undefined;
     
     // ポートが明示されていない場合、デフォルトポートを使用
     if (!host.includes(':')) {
       // ElectronアプリまたはWebサーバーが動作する標準ポートを推測
-      const defaultPort = isElectron ? '3000' : window.location.port || '3001';
+      const defaultPort = isElectron 
+        ? (window.location.port || '3001')  // Electronでも現在のポートを使用
+        : (window.location.port || '3000');  // ウェブ版のデフォルト
       host = `${window.location.hostname}:${defaultPort}`;
     }
     

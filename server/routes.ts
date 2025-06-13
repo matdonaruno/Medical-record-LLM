@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { setupAuth } from "./auth";
@@ -8,6 +8,12 @@ import * as llm from "./llm";
 import { randomBytes } from "crypto";
 import express from "express";
 import session from "express-session";
+
+// Passport.jsの型拡張
+interface AuthenticatedRequest extends Omit<Request, 'user' | 'isAuthenticated'> {
+  isAuthenticated(): boolean;
+  user?: { id: number; username: string };
+}
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { z } from "zod";
@@ -270,7 +276,7 @@ export async function registerRoutes(app: Express, server?: Server): Promise<Ser
     error: { status: number; data?: any };
   };
 
-  async function validateMessageRequest(req: Request): Promise<ValidationResult> {
+  async function validateMessageRequest(req: AuthenticatedRequest): Promise<ValidationResult> {
     if (!req.isAuthenticated()) {
       console.log("未認証ユーザーがメッセージを送信しようとしました");
       return { success: false, error: { status: 401 } };
@@ -283,8 +289,8 @@ export async function registerRoutes(app: Express, server?: Server): Promise<Ser
     }
 
     // ユーザーIDが一致するか確認
-    if (parsed.data.userId !== req.user.id) {
-      console.log(`ユーザーIDの不一致: リクエスト=${parsed.data.userId}, セッション=${req.user.id}`);
+    if (!req.user || parsed.data.userId !== req.user.id) {
+      console.log(`ユーザーIDの不一致: リクエスト=${parsed.data.userId}, セッション=${req.user?.id}`);
       return { success: false, error: { status: 403, data: { message: "Unauthorized: User ID mismatch" } } };
     }
 
@@ -296,18 +302,24 @@ export async function registerRoutes(app: Express, server?: Server): Promise<Ser
         return { success: false, error: { status: 404, data: { message: "Chat not found" } } };
       }
       
-      if (chat.userId !== req.user.id) {
-        console.log(`ユーザーID ${req.user.id} はチャットID ${parsed.data.chatId} にメッセージを送信する権限がありません（所有者: ${chat.userId}）`);
+      if (!req.user || chat.userId !== req.user.id) {
+        console.log(`ユーザーID ${req.user?.id} はチャットID ${parsed.data.chatId} にメッセージを送信する権限がありません（所有者: ${chat.userId}）`);
         return { success: false, error: { status: 403, data: { message: "Unauthorized: Not chat owner" } } };
       }
     }
 
-    return { success: true, data: parsed.data };
+    return { 
+      success: true, 
+      data: {
+        ...parsed.data,
+        chatId: parsed.data.chatId || undefined
+      } as MessageData 
+    };
   }
 
   interface MessageData {
     content: string;
-    role: string;
+    role: "user" | "assistant";
     userId: number;
     chatId?: number;
   }
@@ -373,17 +385,17 @@ export async function registerRoutes(app: Express, server?: Server): Promise<Ser
     return errorMessage;
   }
 
-  app.post("/api/messages", async (req, res) => {
+  app.post("/api/messages", async (req: AuthenticatedRequest, res) => {
     const validation = await validateMessageRequest(req);
     if (!validation.success) {
       const { status, data } = validation.error;
       return data ? res.status(status).json(data) : res.sendStatus(status);
     }
 
-    const { userMessage, messages } = await createUserMessageAndGetHistory(validation.data);
+    const { userMessage, messages } = await createUserMessageAndGetHistory(validation.data as any);
 
     try {
-      const assistantMessage = await generateAssistantResponse(messages, req.user.id, validation.data.chatId);
+      const assistantMessage = await generateAssistantResponse(messages, req.user!.id, validation.data.chatId);
       
       await updateChatTitleIfNeeded(validation.data.chatId, messages, validation.data.content);
 
@@ -394,7 +406,7 @@ export async function registerRoutes(app: Express, server?: Server): Promise<Ser
 
       res.status(201).json([userMessage, assistantMessage]);
     } catch (error) {
-      const errorMessage = await handleMessageError(error, req.user.id, validation.data.chatId);
+      const errorMessage = await handleMessageError(error, req.user!.id, validation.data.chatId);
       res.status(201).json([userMessage, errorMessage]);
     }
   });

@@ -6,19 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Settings, Upload, Download, Trash2, RefreshCw } from 'lucide-react';
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      getModelsPath: () => Promise<string>;
-      importModel: (filePath: string) => Promise<{ success: boolean; path?: string; error?: string }>;
-      selectModelFile: () => Promise<string>;
-      getAvailableModels: () => Promise<any[]>;
-      onModelProgress: (callback: (progress: string) => void) => void;
-      onModelReady: (callback: (ready: boolean) => void) => void;
-      onOllamaError: (callback: (error: string) => void) => void;
-    };
-  }
-}
+// 型定義は electron.d.ts で定義済み
 
 interface Model {
   name: string;

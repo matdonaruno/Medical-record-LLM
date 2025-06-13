@@ -30,23 +30,52 @@ let expressServer: ChildProcess | null = null;
 let serverPort = electronConfig.server.port;
 
 // Ollamaバイナリのパスを取得
-function getOllamaPath(): string {
-  if (isDev) {
-    // 開発環境では既存のOllamaを使用
-    return 'ollama';
+function getOllamaPath(): string | null {
+  const platform = process.platform;
+  const resourcesPath = process.resourcesPath;
+  
+  // バンドルされたOllamaを優先的に使用
+  let bundledPath: string;
+  
+  if (platform === 'win32') {
+    bundledPath = path.join(resourcesPath, 'ollama', 'ollama.exe');
+  } else if (platform === 'darwin') {
+    bundledPath = path.join(resourcesPath, 'ollama', 'ollama');
   } else {
-    // 本番環境ではアプリ内のOllamaを使用
-    const resourcesPath = process.resourcesPath;
-    const platform = process.platform;
-    
-    if (platform === 'win32') {
-      return path.join(resourcesPath, 'bin', 'ollama.exe');
-    } else if (platform === 'darwin') {
-      return path.join(resourcesPath, 'bin', 'ollama');
-    } else {
-      return path.join(resourcesPath, 'bin', 'ollama');
-    }
+    bundledPath = path.join(resourcesPath, 'ollama', 'ollama');
   }
+  
+  console.log('Checking for bundled Ollama at:', bundledPath);
+  
+  if (fs.existsSync(bundledPath)) {
+    console.log('Found bundled Ollama');
+    
+    // Unix系OSでは実行権限を確認・設定
+    if (platform !== 'win32') {
+      try {
+        const stats = fs.statSync(bundledPath);
+        const hasExecutePermission = !!(stats.mode & parseInt('0100', 8));
+        
+        if (!hasExecutePermission) {
+          console.log('Setting execute permission for Ollama binary');
+          fs.chmodSync(bundledPath, 0o755);
+        }
+      } catch (error) {
+        console.warn('Failed to check/set execute permission:', error);
+      }
+    }
+    
+    return bundledPath;
+  }
+  
+  // 開発環境ではシステムのOllamaを使用
+  if (isDev) {
+    console.log('Development mode: using system Ollama');
+    return 'ollama';
+  }
+  
+  console.log('Bundled Ollama not found');
+  return null;
 }
 
 // モデルディレクトリのパスを取得
@@ -57,8 +86,10 @@ function getModelsPath(): string {
 
 // バンドルされたモデルをコピー（初回起動時）
 function copyBundledModels(): void {
-  const sourcePath = path.join(process.resourcesPath, 'models');
+  const sourcePath = path.join(process.resourcesPath, 'ollama-models');
   const targetPath = getModelsPath();
+  
+  console.log('Checking for bundled models at:', sourcePath);
   
   // ソースディレクトリが存在しない場合はスキップ
   if (!fs.existsSync(sourcePath)) {
@@ -172,6 +203,11 @@ async function startExpressServer() {
 async function startOllama() {
   try {
     const ollamaPath = getOllamaPath();
+    
+    if (!ollamaPath) {
+      throw new Error('Ollamaが見つかりません。Ollamaをインストールしてください。');
+    }
+    
     const modelsPath = getModelsPath();
     
     // モデルディレクトリを作成
@@ -205,31 +241,44 @@ async function startOllama() {
       stdio: ['pipe', 'pipe', 'pipe']
     });
 
-    ollamaProcess.stdout?.on('data', (data) => {
+    ollamaProcess.stdout?.on('data', (data: Buffer) => {
       console.log('Ollama stdout:', data.toString());
     });
 
-    ollamaProcess.stderr?.on('data', (data) => {
+    ollamaProcess.stderr?.on('data', (data: Buffer) => {
       console.log('Ollama stderr:', data.toString());
     });
 
-    ollamaProcess.on('error', (error) => {
+    ollamaProcess.on('error', (error: Error) => {
       console.error('Ollama process error:', error);
-      if (mainWindow) {
-        mainWindow.webContents.send('ollama-error', error.message);
-      }
+      const message = error.message.includes('ENOENT') 
+        ? 'Ollamaが見つかりません。Ollamaをインストールしてください。'
+        : `Ollamaの起動に失敗しました: ${error.message}`;
+      showOllamaError(message);
     });
 
     // Ollamaが起動するまで待機
     await waitForOllamaReady();
     console.log('Ollama service is ready');
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to start Ollama:', error);
-    if (mainWindow) {
-      mainWindow.webContents.send('ollama-error', error.message);
-    }
+    showOllamaError(error.message || 'Ollamaの起動に失敗しました');
   }
+}
+
+// Ollamaエラーを表示
+function showOllamaError(message: string) {
+  dialog.showMessageBoxSync({
+    type: 'error',
+    title: 'Ollama Error',
+    message: 'Ollamaの起動に失敗しました',
+    detail: message + '\n\n配布パッケージに含まれるOllamaが正しくインストールされているか確認してください。',
+    buttons: ['OK']
+  });
+  
+  // アプリを終了
+  app.quit();
 }
 
 // Ollamaの起動確認
@@ -325,6 +374,24 @@ app.whenReady().then(async () => {
     // 環境変数を設定
     process.env.PORT = serverPort.toString();
     
+    // Ollamaの状態をチェック
+    const isOllamaRunning = await checkOllamaRunning();
+    if (!isOllamaRunning) {
+      const ollamaPath = getOllamaPath();
+      if (!ollamaPath) {
+        dialog.showMessageBoxSync({
+          type: 'error',
+          title: 'Ollama not found',
+          message: 'Ollamaが見つかりません',
+          detail: 'Medical Record LLMにバンドルされたOllamaが見つかりません。\n\n配布パッケージが正しくインストールされているか確認してください。',
+          buttons: ['OK']
+        });
+        
+        app.quit();
+        return;
+      }
+    }
+    
     // Ollamaを起動
     await startOllama();
     
@@ -334,8 +401,9 @@ app.whenReady().then(async () => {
     // ウィンドウを作成
     createWindow();
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to start application:', error);
+    dialog.showErrorBox('起動エラー', `アプリケーションの起動に失敗しました:\n${error.message}`);
     app.quit();
   }
 

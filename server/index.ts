@@ -5,6 +5,7 @@ import { initializeLLM, getAvailableModels } from "./llm";
 import { config, validateConfig, logConfig } from "./config";
 import dotenv from 'dotenv';
 import { storage } from "./storage";
+import { testDatabaseConnection } from "./db";
 import { createServer } from "http";
 
 // 環境変数を読み込む
@@ -105,6 +106,13 @@ async function initializeApp() {
   try {
     // Electronモードかどうかを判定
     const isElectronMode = process.env.ELECTRON_MODE === 'true';
+    
+    // データベース接続テスト
+    console.log('🗄️ Database connection test...');
+    const dbConnected = await testDatabaseConnection();
+    if (!dbConnected) {
+      throw new Error('Database connection failed');
+    }
     
     // LLMの初期化（Electronモードの場合はOllamaチェックをスキップ）
     await initializeLLM('', isElectronMode);

@@ -29,12 +29,6 @@
         "target": "dmg",
         "arch": ["x64", "arm64"]
       }
-    ],
-    "extraResources": [
-      {
-        "from": "resources/bin/ollama-darwin",
-        "to": "bin/ollama"
-      }
     ]
   },
   "win": {
@@ -45,12 +39,6 @@
       }
     ],
     "icon": "build/icon.ico",
-    "extraResources": [
-      {
-        "from": "resources/bin/ollama.exe",
-        "to": "bin/ollama.exe"
-      }
-    ],
     "requestedExecutionLevel": "asInvoker",
     "artifactName": "${productName}-${version}-Setup.${ext}"
   },
@@ -62,13 +50,7 @@
       }
     ],
     "icon": "build/icon.png",
-    "category": "Office",
-    "extraResources": [
-      {
-        "from": "resources/bin/ollama-linux",
-        "to": "bin/ollama"
-      }
-    ]
+    "category": "Office"
   },
   "nsis": {
     "oneClick": false,

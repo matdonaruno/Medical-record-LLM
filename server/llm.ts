@@ -113,11 +113,13 @@ export async function generateResponse(messages: Message[], model: string = curr
       content: msg.content
     }));
 
-    // システムメッセージを追加
-    formattedMessages.unshift({
-      role: 'system' as const, // Ollamaのシステムメッセージ用
-      content: systemPrompt
-    });
+    // システムメッセージを追加（Ollamaでは最初のメッセージにシステムプロンプトを統合）
+    if (formattedMessages.length > 0) {
+      formattedMessages[0] = {
+        role: 'user' as const,
+        content: systemPrompt + '\n\n' + formattedMessages[0].content
+      };
+    }
 
     const response = await fetch(`${config.ollama.baseUrl}/api/chat`, {
       method: "POST",
@@ -176,7 +178,7 @@ export async function getAvailableModels() {
       id: index + 1,
       model_name: model.name,
       display_name: getDisplayName(model.name),
-      size: formatModelSize(model.size),
+      size: formatModelSize(model.size || 0),
       modified_at: model.modified_at
     }));
   } catch (error) {

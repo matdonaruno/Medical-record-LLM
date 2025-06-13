@@ -29,10 +29,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }
 });
 
-// 後方互換性のために既存のAPIも維持
+// 後方互換性のために既存のAPIも維持（現在は未使用）
 contextBridge.exposeInMainWorld('electron', {
-  sendMessage: (message: string) => ipcRenderer.invoke('ollama-generate', message),
+  sendMessage: (message: string) => Promise.resolve(`Echo: ${message}`), // プレースホルダー実装
   onOllamaOutput: (callback: (output: string) => void) => {
-    ipcRenderer.on('ollama-output', (_event, output) => callback(output));
+    // 現在は使用されていないため、何もしない
+    console.log('onOllamaOutput callback registered but not implemented');
   }
 });

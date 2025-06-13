@@ -13,8 +13,9 @@ import { MessageCircle } from "lucide-react";
 
 export default function AuthPage() {
   const [_, setLocation] = useLocation();
-  const { user, loginMutation, registerMutation } = useAuth();
+  const { user, login, register } = useAuth();
   const [activeTab, setActiveTab] = useState<"login" | "register">("login");
+  const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm({
     resolver: zodResolver(insertUserSchema),
@@ -30,10 +31,15 @@ export default function AuthPage() {
   }
 
   const onSubmit = async (data: { username: string; password: string }) => {
-    if (activeTab === "login") {
-      await loginMutation.mutateAsync(data);
-    } else {
-      await registerMutation.mutateAsync(data);
+    setIsLoading(true);
+    try {
+      if (activeTab === "login") {
+        await login(data.username, data.password);
+      } else {
+        await register(data.username, data.password);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -59,7 +65,7 @@ export default function AuthPage() {
                   <Input
                     id="username"
                     {...form.register("username")}
-                    disabled={loginMutation.isPending || registerMutation.isPending}
+                    disabled={isLoading}
                   />
                 </div>
 
@@ -69,14 +75,14 @@ export default function AuthPage() {
                     id="password"
                     type="password"
                     {...form.register("password")}
-                    disabled={loginMutation.isPending || registerMutation.isPending}
+                    disabled={isLoading}
                   />
                 </div>
 
                 <Button
                   type="submit"
                   className="w-full"
-                  disabled={loginMutation.isPending || registerMutation.isPending}
+                  disabled={isLoading}
                 >
                   {activeTab === "login" ? "Login" : "Register"}
                 </Button>

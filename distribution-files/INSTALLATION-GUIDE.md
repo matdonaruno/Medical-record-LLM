@@ -4,58 +4,45 @@
 
 ```
 Medical-Record-LLM-Distribution/
-├── Medical Record LLM-1.0.0-Setup.exe  (124MB) - メインアプリケーション
-├── OllamaSetup.exe                     (20MB)  - LLM実行環境
-├── ollama-models/                      (2.5GB) - 医療特化LLMモデル
-│   ├── alibayram/                               - モデルマニフェスト
-│   └── sha256-* (4ファイル)                     - モデルデータ
-└── README.md                                    - このファイル
+├── Medical Record LLM-1.0.0-Setup.exe  (~3GB) - Ollama同梱版アプリケーション
+├── README.md                                   - このファイル
+├── FILES-OVERVIEW.md                           - ファイル詳細説明
+└── PROJECT-README.md                           - プロジェクト概要
 ```
+
+**注意**: このインストーラーには以下が同梱されています：
+- Medical Record LLMアプリケーション
+- Ollama実行環境
+- 医療特化LLMモデル (alibayram/medgemma)
 
 ## 🏥 Windows PCでのインストール手順
 
-### 1️⃣ Ollamaのインストール
-```
-1. OllamaSetup.exe をダブルクリック
-2. インストーラーの指示に従ってインストール
-3. インストール完了後、PCを再起動
-```
+### 📥 ワンクリックインストール
 
-### 2️⃣ 医療特化モデルの設置
-```
-1. エクスプローラーでアドレスバーに以下を入力:
-   %USERPROFILE%\.ollama
+**すべてが同梱されているため、非常に簡単です：**
 
-2. 「models」フォルダを作成（まだない場合）
-
-3. USBの「ollama-models」内の全ファイルを以下にコピー:
-   - alibayram フォルダ → %USERPROFILE%\.ollama\models\manifests\registry.ollama.ai\
-   - sha256-* ファイル → %USERPROFILE%\.ollama\models\blobs\
-
-ディレクトリ構造例:
-C:\Users\[ユーザー名]\.ollama\models\
-├── manifests\registry.ollama.ai\alibayram\medgemma\latest
-└── blobs\
-    ├── sha256-b2e54fff7735...
-    ├── sha256-2d20114e538b...
-    ├── sha256-e0a42594d802...
-    └── sha256-5c4d6d243f18...
-```
-
-### 3️⃣ Medical Record LLMのインストール
 ```
 1. Medical Record LLM-1.0.0-Setup.exe をダブルクリック
-2. インストール先を選択（デフォルト推奨）
-3. デスクトップショートカット作成を確認
-4. インストール完了
+2. インストーラーの指示に従ってインストール
+3. インストール先を選択（デフォルト推奨：3GB以上の空き容量が必要）
+4. デスクトップショートカット作成を確認
+5. インストール完了（数分かかります）
 ```
 
-### 4️⃣ 動作確認
+**これだけで完了です！** 
+- Ollama実行環境
+- 医療特化LLMモデル
+- Medical Record LLMアプリケーション
+
+すべてが自動的にインストールされます。
+
+### ✅ 動作確認
 ```
 1. デスクトップの「Medical Record LLM」アイコンをダブルクリック
-2. ユーザー登録またはログイン
-3. 「alibayram/medgemma」モデルが利用可能か確認
-4. 音声入力ボタン（🎤）で日本語音声入力をテスト
+2. アプリの初回起動（少し時間がかかります）
+3. ユーザー登録またはログイン
+4. 「alibayram/medgemma」モデルが利用可能か確認
+5. 音声入力ボタン（🎤）で日本語音声入力をテスト
 ```
 
 ## 🎯 主な機能
@@ -82,26 +69,26 @@ C:\Users\[ユーザー名]\.ollama\models\
 
 ## 🔧 トラブルシューティング
 
-### モデルが認識されない場合
+### アプリが起動しない・何も表示されない場合
 ```
-1. Ollamaが正しくインストールされているか確認
-2. コマンドプロンプトで「ollama list」を実行
-3. 「alibayram/medgemma」が表示されることを確認
-4. 表示されない場合、モデルファイルの配置を再確認
+1. インストールが完了しているか確認（3GB以上のファイルサイズ）
+2. Windows Defenderの除外設定を確認
+3. 管理者として実行を試行
+4. PCを再起動してから再試行
 ```
 
 ### 音声入力が動作しない場合
 ```
 1. Windowsの音声認識設定を確認
 2. マイクの接続と許可設定を確認
-3. ブラウザではなくElectronアプリを使用
+3. プライバシー設定でマイクアクセスを許可
 ```
 
-### アプリが起動しない場合
+### モデル応答が遅い場合
 ```
-1. Windows Defenderの除外設定を確認
-2. 管理者として実行を試行
-3. インストールディレクトリの権限を確認
+1. 初回起動時は時間がかかります（正常です）
+2. PCのスペックによって応答速度が変わります
+3. 他のアプリケーションを閉じてメモリを確保
 ```
 
 ## 📞 サポート
