@@ -14,6 +14,10 @@
     "node_modules/**/*",
     "package.json"
   ],
+  "asarUnpack": [
+    "server/**/*",
+    "dist/server/**/*"
+  ],
   "extraResources": [
     {
       "from": "resources/",

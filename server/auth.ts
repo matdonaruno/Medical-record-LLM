@@ -29,13 +29,21 @@ async function comparePasswords(supplied: string, stored: string) {
 }
 
 export function setupAuth(app: Express) {
+  // Electronモードでは環境変数が不足している場合にデフォルト値を使用
+  const isElectronMode = process.env.ELECTRON_MODE === 'true';
+  const sessionSecret = process.env.SESSION_SECRET || (isElectronMode ? 'electron-default-secret-key' : undefined);
+  
+  if (!sessionSecret) {
+    throw new Error('SESSION_SECRET environment variable is required');
+  }
+  
   const sessionSettings: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET!,
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     store: storage.sessionStore,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      secure: process.env.NODE_ENV === "production" && !isElectronMode,
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }

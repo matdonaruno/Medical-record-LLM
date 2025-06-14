@@ -23,6 +23,11 @@ export async function registerRoutes(app: Express, server?: Server): Promise<Ser
   // 既存のサーバーがあれば使用、なければ新規作成
   const httpServer = server || createServer(app);
   
+  // ヘルスチェックエンドポイント
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+  
   // WebSocketServerの設定
   const wss = new WebSocketServer({ 
     server: httpServer,

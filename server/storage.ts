@@ -187,4 +187,118 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export const storage = new DatabaseStorage();
+// Electronモード用のメモリストレージ実装
+export class MemoryStorage implements IStorage {
+  private users: User[] = [];
+  private messages: Message[] = [];
+  private chats: Chat[] = [];
+  private modelSettings: ModelSettings[] = [];
+  private defaultModel: string = 'alibayram/medgemma';
+  sessionStore: session.Store;
+
+  constructor() {
+    // Electronモード用のメモリセッションストア
+    this.sessionStore = new session.MemoryStore();
+  }
+
+  async getUser(id: number): Promise<User | undefined> {
+    return this.users.find(u => u.id === id);
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return this.users.find(u => u.username === username);
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const user: User = {
+      id: this.users.length + 1,
+      ...insertUser,
+      createdAt: new Date()
+    };
+    this.users.push(user);
+    return user;
+  }
+
+  async getMessagesByUser(userId: number): Promise<Message[]> {
+    return this.messages.filter(m => m.userId === userId);
+  }
+
+  async getMessagesByChat(chatId: number): Promise<Message[]> {
+    return this.messages.filter(m => m.chatId === chatId);
+  }
+
+  async createMessage(insertMessage: InsertMessage): Promise<Message> {
+    const message: Message = {
+      id: this.messages.length + 1,
+      ...insertMessage,
+      timestamp: new Date()
+    };
+    this.messages.push(message);
+    return message;
+  }
+
+  async getChatsByUser(userId: number): Promise<Chat[]> {
+    return this.chats.filter(c => c.userId === userId);
+  }
+
+  async getChat(id: number): Promise<Chat | undefined> {
+    return this.chats.find(c => c.id === id);
+  }
+
+  async createChat(insertChat: InsertChat): Promise<Chat> {
+    const chat: Chat = {
+      id: this.chats.length + 1,
+      ...insertChat,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.chats.push(chat);
+    return chat;
+  }
+
+  async updateChatTitle(id: number, title: string): Promise<void> {
+    const chat = this.chats.find(c => c.id === id);
+    if (chat) {
+      chat.title = title;
+      chat.updatedAt = new Date();
+    }
+  }
+
+  async deleteChat(id: number): Promise<void> {
+    this.messages = this.messages.filter(m => m.chatId !== id);
+    this.chats = this.chats.filter(c => c.id !== id);
+  }
+
+  async getModelSettings(): Promise<ModelSettings[]> {
+    return this.modelSettings;
+  }
+
+  async getDefaultModel(): Promise<string> {
+    return this.defaultModel;
+  }
+
+  async setDefaultModel(modelName: string): Promise<void> {
+    this.defaultModel = modelName;
+  }
+
+  async addModel(modelName: string): Promise<ModelSettings> {
+    const model: ModelSettings = {
+      id: this.modelSettings.length + 1,
+      model_name: modelName,
+      is_default: false,
+      created_at: new Date()
+    };
+    this.modelSettings.push(model);
+    return model;
+  }
+
+  async deleteModel(modelId: number): Promise<void> {
+    this.modelSettings = this.modelSettings.filter(m => m.id !== modelId);
+  }
+}
+
+// Electronモードかどうかでストレージ実装を選択
+const isElectronMode = process.env.ELECTRON_MODE === 'true';
+export const storage: IStorage = isElectronMode 
+  ? new MemoryStorage() 
+  : new DatabaseStorage();

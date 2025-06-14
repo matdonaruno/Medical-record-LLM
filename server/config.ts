@@ -74,8 +74,14 @@ export function validateConfig(): void {
     throw new Error(`Invalid Ollama port: ${config.ollama.port}`);
   }
   
-  if (!config.database.url) {
+  // Electronモードではデータベース接続をオプションにする
+  const isElectronMode = process.env.ELECTRON_MODE === 'true';
+  if (!isElectronMode && !config.database.url) {
     throw new Error('DATABASE_URL is required');
+  }
+  
+  if (isElectronMode) {
+    console.log('🔧 Electron mode: Database validation skipped');
   }
 }
 

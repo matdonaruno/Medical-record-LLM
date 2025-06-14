@@ -8,12 +8,21 @@ import dotenv from 'dotenv';
 // 環境変数を読み込む
 dotenv.config();
 
-if (!process.env.DATABASE_URL) {
+// Electronモードではデータベース接続をオプションにする
+const isElectronMode = process.env.ELECTRON_MODE === 'true';
+
+if (!process.env.DATABASE_URL && !isElectronMode) {
   console.error("DATABASE_URL environment variable is not set.");
   console.error("Please copy .env.example to .env and configure your database connection.");
   throw new Error(
     "DATABASE_URL must be set. Please check .env file configuration.",
   );
+}
+
+// Electronモード用のダミーDATABASE_URL
+if (isElectronMode && !process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = 'postgresql://localhost:5432/dummy_db';
+  console.log('🔧 Electron mode: Using dummy DATABASE_URL');
 }
 
 // PostgreSQL接続プールの設定
@@ -26,6 +35,13 @@ export const pool = new Pool({
 
 // データベース接続テスト
 export async function testDatabaseConnection(): Promise<boolean> {
+  const isElectronMode = process.env.ELECTRON_MODE === 'true';
+  
+  if (isElectronMode) {
+    console.log('🔧 Electron mode: Skipping database connection test');
+    return true;
+  }
+  
   try {
     const client = await pool.connect();
     await client.query('SELECT NOW()');

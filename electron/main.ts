@@ -28,6 +28,24 @@ let mainWindow: BrowserWindow | null = null;
 let ollamaProcess: ChildProcess | null = null;
 let expressServer: ChildProcess | null = null;
 let serverPort = electronConfig.server.port;
+let isAppStarted = false; // 起動制御フラグ
+
+// シングルインスタンス制御
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  console.log('Another instance is already running. Exiting immediately...');
+  process.exit(0); // 即座に終了
+}
+
+// 2番目のインスタンスが起動された時の処理
+app.on('second-instance', (event, commandLine, workingDirectory) => {
+  // 最初のインスタンスのウィンドウをフォーカス
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
 
 // Ollamaバイナリのパスを取得
 function getOllamaPath(): string | null {
@@ -74,7 +92,47 @@ function getOllamaPath(): string | null {
     return 'ollama';
   }
   
-  console.log('Bundled Ollama not found');
+  // プロダクション環境でもシステムのOllamaを探す
+  console.log('Bundled Ollama not found, checking system Ollama');
+  
+  // Windowsの場合、一般的なインストールパスをチェック
+  if (platform === 'win32') {
+    const possiblePaths = [
+      'C:\\Program Files\\Ollama\\ollama.exe',
+      'C:\\Program Files (x86)\\Ollama\\ollama.exe',
+      path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama.exe'),
+      path.join(process.env.APPDATA || '', 'Ollama', 'ollama.exe'),
+    ];
+    
+    for (const ollamaPath of possiblePaths) {
+      if (fs.existsSync(ollamaPath)) {
+        console.log('Found system Ollama at:', ollamaPath);
+        return ollamaPath;
+      }
+    }
+  }
+  
+  // PATHからollamaコマンドを探す
+  try {
+    const { execSync } = require('child_process');
+    if (platform === 'win32') {
+      const result = execSync('where ollama', { encoding: 'utf8' }).trim();
+      if (result) {
+        console.log('Found Ollama in PATH:', result.split('\n')[0]);
+        return result.split('\n')[0];
+      }
+    } else {
+      const result = execSync('which ollama', { encoding: 'utf8' }).trim();
+      if (result) {
+        console.log('Found Ollama in PATH:', result);
+        return result;
+      }
+    }
+  } catch (error) {
+    console.log('Ollama not found in PATH');
+  }
+  
+  console.log('Ollama not found anywhere');
   return null;
 }
 
@@ -126,30 +184,96 @@ function copyBundledModels(): void {
 }
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.cjs')
-    },
-    icon: path.join(__dirname, '../assets/icon.ico'), // アイコンを追加
-    autoHideMenuBar: true // メニューバーを非表示
-  });
-
-  // サーバー起動後にロード
-  setTimeout(() => {
-    // 設定されたサーバーURLを使用
-    mainWindow?.loadURL(`http://${electronConfig.server.host}:${electronConfig.server.port}`);
-    if (isDev) {
-      mainWindow?.webContents.openDevTools();
+  // 既にウィンドウが存在する場合は作成しない
+  if (mainWindow !== null) {
+    console.log('Window already exists, skipping creation');
+    return;
+  }
+  
+  try {
+    console.log('Creating main window...');
+    
+    // アイコンファイルの存在確認
+    const iconPaths = [
+      path.join(__dirname, '../assets/icon.ico'),
+      path.join(__dirname, '../icons/icon.ico'),
+      path.join(process.resourcesPath, 'icons', 'icon.ico')
+    ];
+    
+    let iconPath = undefined;
+    for (const testPath of iconPaths) {
+      if (fs.existsSync(testPath)) {
+        iconPath = testPath;
+        console.log('Found icon at:', iconPath);
+        break;
+      }
     }
-  }, 2000);
+    
+    // プリロードスクリプトの存在確認
+    const preloadPath = path.join(__dirname, 'preload.cjs');
+    if (!fs.existsSync(preloadPath)) {
+      console.warn('Preload script not found at:', preloadPath);
+    }
+    
+    const windowOptions: any = {
+      width: 1200,
+      height: 800,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: fs.existsSync(preloadPath) ? preloadPath : undefined
+      },
+      autoHideMenuBar: true, // メニューバーを非表示
+      show: false // 初期状態では非表示
+    };
+    
+    // アイコンが見つかった場合のみ設定
+    if (iconPath) {
+      windowOptions.icon = iconPath;
+    }
+    
+    mainWindow = new BrowserWindow(windowOptions);
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+    // ウィンドウ準備完了後に表示
+    mainWindow.once('ready-to-show', () => {
+      console.log('Window ready to show');
+      mainWindow?.show();
+    });
+
+    // サーバーが起動するまで待機してからロード
+    waitForServerReady().then(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const serverUrl = `http://${electronConfig.server.host}:${serverPort}`;
+        console.log('Loading URL:', serverUrl);
+        mainWindow.loadURL(serverUrl).catch((error) => {
+          console.error('Failed to load URL:', error);
+          dialog.showErrorBox('URL Load Error', `Failed to load application: ${error.message}`);
+        });
+        
+        if (isDev) {
+          mainWindow.webContents.openDevTools();
+        }
+      }
+    }).catch((error) => {
+      console.error('Server failed to start:', error);
+      dialog.showErrorBox('Server Error', `Failed to start server: ${error.message}`);
+    });
+
+    mainWindow.on('closed', () => {
+      console.log('Main window closed');
+      mainWindow = null;
+    });
+
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+      console.error('Page failed to load:', errorCode, errorDescription);
+    });
+
+  } catch (error) {
+    console.error('Error creating window:', error);
+    dialog.showErrorBox('Window Creation Error', `Failed to create window: ${error.message}`);
+    cleanup();
+    process.exit(1);
+  }
 }
 
 // Expressサーバーを起動
@@ -163,35 +287,111 @@ async function startExpressServer() {
       if (isDev) {
         // 開発環境では子プロセスでサーバーを起動
         const { spawn } = require('child_process');
-        const serverProcess = spawn('tsx', ['server/index.ts'], {
-          env: { ...process.env, ELECTRON_MODE: 'true' },
+        expressServer = spawn('tsx', ['server/index.ts'], {
+          env: { ...process.env, ELECTRON_MODE: 'true', PORT: serverPort.toString() },
           stdio: ['pipe', 'pipe', 'pipe']
         });
+        const serverProcess = expressServer;
         
         serverProcess.stdout.on('data', (data) => {
-          console.log('Server:', data.toString());
-          if (data.toString().includes('serving on port')) {
-            resolve(true);
+          const output = data.toString();
+          console.log('Server:', output);
+          if (output.includes('serving on port') || output.includes('Server started')) {
+            console.log('Dev server startup detected, resolving...');
+            setTimeout(() => resolve(true), 2000); // 2秒の猶予
           }
         });
         
         serverProcess.stderr.on('data', (data) => {
-          console.error('Server Error:', data.toString());
+          const errorOutput = data.toString();
+          console.error('Dev Server Error:', errorOutput);
+          // エラーでもサーバーが起動する場合があるので、即座にrejectしない
         });
         
         serverProcess.on('error', (error) => {
-          console.error('Failed to start server process:', error);
+          console.error('Failed to start dev server process:', error);
           reject(error);
         });
         
-        // 10秒後にタイムアウト
-        setTimeout(() => resolve(true), 10000);
+        serverProcess.on('exit', (code) => {
+          console.log('Dev server process exited with code:', code);
+          if (code !== 0) {
+            reject(new Error(`Dev server process exited with code ${code}`));
+          }
+        });
+        
+        // 20秒後にタイムアウト
+        setTimeout(() => {
+          console.log('Dev server startup timeout, but continuing...');
+          resolve(true);
+        }, 20000);
         
       } else {
-        // 本番環境では直接インポート
-        require('../dist/server/index.js');
-        console.log('Express server started');
-        resolve(true);
+        // 本番環境では子プロセスでサーバーを起動
+        const { spawn } = require('child_process');
+        
+        // サーバーファイルの場所を複数試行
+        const possibleServerPaths = [
+          path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'server', 'index.js'),
+          path.join(__dirname, '..', 'dist', 'server', 'index.js'),
+          path.join(__dirname, '..', 'server', 'index.js'), 
+          path.join(process.resourcesPath, 'app.asar', 'dist', 'server', 'index.js'),
+          path.join(process.resourcesPath, 'app.asar', 'server', 'index.js')
+        ];
+        
+        let serverPath = null;
+        for (const testPath of possibleServerPaths) {
+          if (fs.existsSync(testPath)) {
+            serverPath = testPath;
+            console.log('Found server at:', serverPath);
+            break;
+          }
+        }
+        
+        if (!serverPath) {
+          console.error('Server file not found. Checked paths:', possibleServerPaths);
+          reject(new Error('Server file not found'));
+          return;
+        }
+        
+        expressServer = spawn(process.execPath, [serverPath], {
+          env: { ...process.env, ELECTRON_MODE: 'true', PORT: serverPort.toString() },
+          stdio: ['pipe', 'pipe', 'pipe']
+        });
+        const serverProcess = expressServer;
+        
+        serverProcess.stdout.on('data', (data) => {
+          const output = data.toString();
+          console.log('Server STDOUT:', output);
+          if (output.includes('serving on port') || output.includes('Server started') || output.includes('[express] serving on port')) {
+            console.log('Production server startup detected, resolving...');
+            setTimeout(() => resolve(true), 2000); // 2秒の猶予
+          }
+        });
+        
+        serverProcess.stderr.on('data', (data) => {
+          const errorOutput = data.toString();
+          console.error('Production Server Error:', errorOutput);
+          // エラーでもサーバーが起動する場合があるので、即座にrejectしない
+        });
+        
+        serverProcess.on('error', (error) => {
+          console.error('Failed to start production server process:', error);
+          reject(error);
+        });
+        
+        serverProcess.on('exit', (code) => {
+          console.log('Production server process exited with code:', code);
+          if (code !== 0) {
+            reject(new Error(`Production server process exited with code ${code}`));
+          }
+        });
+        
+        // 20秒後にタイムアウト
+        setTimeout(() => {
+          console.log('Production server startup timeout, but continuing...');
+          resolve(true);
+        }, 20000);
       }
     } catch (error) {
       console.error('Failed to start Express server:', error);
@@ -277,7 +477,8 @@ function showOllamaError(message: string) {
     buttons: ['OK']
   });
   
-  // アプリを終了
+  // プロセスをクリーンアップしてアプリを終了
+  cleanup();
   app.quit();
 }
 
@@ -300,6 +501,23 @@ async function waitForOllamaReady(maxRetries = 30): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
   throw new Error('Ollama failed to start within timeout');
+}
+
+// サーバーが準備完了まで待機
+async function waitForServerReady(maxRetries = 30): Promise<void> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const response = await fetch(`http://${electronConfig.server.host}:${serverPort}/api/health`);
+      if (response.ok) {
+        console.log('Server is ready');
+        return;
+      }
+    } catch (error) {
+      console.log(`Waiting for server... attempt ${i + 1}/${maxRetries}`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  throw new Error('Server failed to start within timeout');
 }
 
 // モデル管理のIPCハンドラー
@@ -350,21 +568,43 @@ ipcMain.handle('get-available-models', async () => {
 });
 
 // 利用可能な空きポートを見つける
-async function findAvailablePort(startPort: number = electronConfig.server.port): Promise<number> {
+async function findAvailablePort(startPort: number = electronConfig.server.port, maxTries: number = 100): Promise<number> {
+  for (let port = startPort; port < startPort + maxTries; port++) {
+    try {
+      const available = await checkPortAvailable(port);
+      if (available) {
+        return port;
+      }
+    } catch (error) {
+      console.log(`Port ${port} is not available, trying next...`);
+    }
+  }
+  throw new Error(`No available port found in range ${startPort}-${startPort + maxTries}`);
+}
+
+// ポートが利用可能かチェック
+function checkPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const server = require('net').createServer();
-    server.listen(startPort, () => {
-      const port = server.address().port;
-      server.close(() => resolve(port));
+    server.listen(port, () => {
+      server.close(() => resolve(true));
     });
     server.on('error', () => {
-      resolve(findAvailablePort(startPort + 1));
+      resolve(false);
     });
   });
 }
 
-app.whenReady().then(async () => {
+// メイン起動処理
+async function startMainApp() {
   try {
+    // 二重起動防止
+    if (isAppStarted) {
+      console.log('App already started, ignoring...');
+      return;
+    }
+    isAppStarted = true;
+    
     console.log('Starting Medical Record LLM...');
     
     // 利用可能なポートを見つける
@@ -379,6 +619,7 @@ app.whenReady().then(async () => {
     if (!isOllamaRunning) {
       const ollamaPath = getOllamaPath();
       if (!ollamaPath) {
+        console.error('Ollama not found, exiting...');
         dialog.showMessageBoxSync({
           type: 'error',
           title: 'Ollama not found',
@@ -387,39 +628,109 @@ app.whenReady().then(async () => {
           buttons: ['OK']
         });
         
-        app.quit();
-        return;
+        cleanup();
+        process.exit(1); // 即座に終了
       }
     }
     
-    // Ollamaを起動
-    await startOllama();
-    
-    // Expressサーバーを起動
+    // Expressサーバーを最初に起動
+    console.log('Starting Express server...');
     await startExpressServer();
     
+    // Ollamaを並行して起動（バックグラウンド）
+    console.log('Starting Ollama...');
+    startOllama().catch((error) => {
+      console.warn('Ollama startup failed, but continuing:', error);
+      // Ollamaの起動失敗は警告のみ、アプリは継続
+    });
+    
     // ウィンドウを作成
+    console.log('Creating window...');
     createWindow();
     
+    console.log('App started successfully');
+    
   } catch (error: any) {
-    console.error('Failed to start application:', error);
-    dialog.showErrorBox('起動エラー', `アプリケーションの起動に失敗しました:\n${error.message}`);
-    app.quit();
+    console.error('CRITICAL ERROR - Failed to start application:', error);
+    
+    // エラー詳細をログに出力
+    console.error('Error stack:', error.stack);
+    
+    try {
+      dialog.showErrorBox('起動エラー', `アプリケーションの起動に失敗しました:\n${error.message}\n\nアプリケーションを終了します。`);
+    } catch (dialogError) {
+      console.error('Failed to show error dialog:', dialogError);
+    }
+    
+    cleanup();
+    process.exit(1); // 即座に終了
   }
+}
 
-  app.on('activate', () => {
-    if (mainWindow === null) {
+// プロセスクリーンアップ
+function cleanup() {
+  console.log('Cleaning up processes...');
+  
+  if (ollamaProcess && !ollamaProcess.killed) {
+    console.log('Terminating Ollama process...');
+    ollamaProcess.kill('SIGTERM');
+    ollamaProcess = null;
+  }
+  
+  if (expressServer && !expressServer.killed) {
+    console.log('Terminating Express server...');
+    expressServer.kill('SIGTERM');
+    expressServer = null;
+  }
+}
+
+// 未処理の例外をキャッチ
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  cleanup();
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  cleanup();
+  process.exit(1);
+});
+
+// シングルインスタンスの場合のみ起動
+console.log('Got the lock:', gotTheLock);
+app.whenReady().then(async () => {
+  try {
+    console.log('Electron app ready');
+    await startMainApp();
+  } catch (error) {
+    console.error('Error in app ready handler:', error);
+    cleanup();
+    process.exit(1);
+  }
+}).catch((error) => {
+  console.error('Error in app.whenReady():', error);
+  cleanup();
+  process.exit(1);
+});
+
+app.on('activate', () => {
+  try {
+    console.log('App activate event');
+    if (mainWindow === null && isAppStarted) {
+      // Only create window if app has been started and window was closed
       createWindow();
     }
-  });
+  } catch (error) {
+    console.error('Error in activate handler:', error);
+    cleanup();
+    process.exit(1);
+  }
 });
 
 app.on('window-all-closed', () => {
   // すべてのプロセスをクリーンアップ
-  if (ollamaProcess) {
-    console.log('Terminating Ollama process...');
-    ollamaProcess.kill('SIGTERM');
-  }
+  cleanup();
   
   if (process.platform !== 'darwin') {
     app.quit();
@@ -428,7 +739,18 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   // アプリ終了前のクリーンアップ
-  if (ollamaProcess) {
-    ollamaProcess.kill('SIGTERM');
-  }
+  cleanup();
+});
+
+// 強制終了時のクリーンアップ
+process.on('SIGINT', () => {
+  console.log('Received SIGINT, cleaning up...');
+  cleanup();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM, cleaning up...');
+  cleanup();
+  process.exit(0);
 });

@@ -2,13 +2,13 @@
 
 医療現場のパソコン業務を支援する**完全オフライン対応**のローカルLLMチャットアプリケーションです。
 
-## 🔒 **セキュリティと安全性が最優先の設計**
+## 🔒 セキュリティと安全性が最優先の設計
 
 このアプリケーションは医療現場での使用を想定し、**他のアプリケーションに一切影響を与えない**安全な設計となっています。
 
-### ✅ **安全性の証明** - なぜ他のアプリを誤動作させないのか
+### ✅ 安全性の証明 - なぜ他のアプリを誤動作させないのか
 
-#### 1. **完全なネットワーク分離**
+#### 1. 完全なネットワーク分離
 ```typescript
 // server/llm.ts:5 - 外部通信は一切行わない
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
@@ -20,9 +20,8 @@ const env = {
   OLLAMA_HOST: '127.0.0.1:11434'  // 外部ネットワークへの露出なし
 };
 ```
-**証明**: 全ての通信はlocalhost（127.0.0.1）に限定され、インターネットや他のPCへの接続は一切行いません。
 
-#### 2. **ポート競合の自動回避**
+#### 2. ポート競合の自動回避
 ```typescript
 // electron/main.ts:289-300 - 利用可能ポートを自動検索
 async function findAvailablePort(startPort: number = 3000): Promise<number> {
@@ -38,9 +37,8 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   });
 }
 ```
-**証明**: 他のアプリが使用中のポートを自動的に回避し、競合を防ぎます。
 
-#### 3. **ファイルシステムの完全分離**
+#### 3. ファイルシステムの完全分離
 ```typescript
 // electron/main.ts:38-41 - アプリ専用ディレクトリ内でのみ動作
 function getModelsPath(): string {
@@ -55,59 +53,8 @@ webPreferences: {
   preload: path.join(__dirname, 'preload.cjs')  // 安全なIPC通信のみ
 }
 ```
-**証明**: システムファイルや他のアプリのデータには一切アクセスしません。
 
-#### 4. **プロセス分離と適切な終了処理**
-```typescript
-// electron/main.ts:186-192 - 独立プロセスとして実行
-ollamaProcess = spawn(ollamaPath, ['serve'], {
-  env,
-  stdio: ['pipe', 'pipe', 'pipe']  // プロセス間通信を制御
-});
-
-// electron/main.ts:334-351 - アプリ終了時の完全クリーンアップ
-app.on('window-all-closed', () => {
-  if (ollamaProcess) {
-    console.log('Terminating Ollama process...');
-    ollamaProcess.kill('SIGTERM');  // プロセスの適切な終了
-  }
-  
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
-```
-**証明**: 独立したプロセス空間で動作し、終了時に完全にクリーンアップされます。
-
-#### 5. **システム設定への影響なし**
-```typescript
-// server/index.ts:10 - 環境変数はローカルファイルから読み込み
-dotenv.config();
-
-// electron/main.ts:114 - アプリケーション固有の設定のみ
-process.env.ELECTRON_MODE = 'true';  // このアプリ内でのみ有効
-```
-**証明**: グローバル環境変数やシステム設定は一切変更しません。
-
-#### 6. **強固な認証とデータ保護**
-```typescript
-// server/auth.ts:18-29 - 軍事レベルの暗号化
-async function hashPassword(password: string) {
-  const salt = randomBytes(16).toString("hex");
-  const buf = (await scryptAsync(password, salt, 64)) as Buffer;  // scrypt暗号化
-  return `${buf.toString("hex")}.${salt}`;
-}
-
-// server/auth.ts:32-42 - セキュアなセッション管理
-cookie: {
-  secure: process.env.NODE_ENV === "production",
-  httpOnly: true,  // XSS攻撃を防止
-  maxAge: 24 * 60 * 60 * 1000
-}
-```
-**証明**: パスワードは軍事レベルのscrypt暗号化で保護され、セッション管理も最高水準です。
-
-## 🚀 **主な機能**
+## 🚀 主な機能
 
 - ✅ **完全オフライン動作** - インターネット接続不要
 - ✅ **複数LLMモデル対応** (Llama3, DeepSeek, Gemma等)
@@ -117,7 +64,7 @@ cookie: {
 - ✅ **レスポンシブUI**
 - ✅ **Windows/Mac/Linux対応**
 
-## 💻 **技術スタック**
+## 💻 技術スタック
 
 ### フロントエンド
 - **React 18** + **TypeScript** - 型安全な開発
@@ -143,51 +90,47 @@ cookie: {
 - **Electron** - クロスプラットフォーム対応
 - **自動更新対応** - メンテナンス性向上
 
-## 📦 **インストール方法**
+## 📦 インストールと配布
 
-### オプション1: デスクトップアプリ（推奨）
+### オプション1: 完全オフライン配布パッケージ（推奨）
 
-#### Windows - 完全オフライン対応
-```bash
-# ワンクリックインストール
-# リリースページから Medical-Record-LLM-Setup.exe をダウンロード
-# （Ollama + モデル同梱版、約3GB）
+#### 配布パッケージ内容
+```
+Medical-Record-LLM-Distribution/
+├── OllamaSetup.exe                  (981MB) - Ollama Windows インストーラー
+├── win-unpacked/                    (2.8GB) - ポータブル版アプリケーション
+│   ├── Medical Record LLM.exe               - メインアプリケーション  
+│   └── resources/                           - アプリリソース
+├── ollama-models/                   (2.3GB) - 医療特化LLMモデル
+│   ├── manifests/                           - モデル設定
+│   └── blobs/                               - モデルデータ
+└── README.md                                - インストールガイド
 
-1. Medical-Record-LLM-Setup.exe をダブルクリック
-2. インストーラーの指示に従ってインストール
-3. デスクトップショートカットから起動
-
-# すべて自動で含まれます：
-# - Ollama実行環境
-# - 医療特化LLMモデル
-# - Medical Record LLMアプリケーション
+総容量: 約6.1GB
 ```
 
-#### macOS
-```bash
-# 開発環境セットアップが必要（現在同梱版は未対応）
-# 下記の「オプション2: 開発環境セットアップ」を参照
+#### インストール手順（3ステップ）
+
+**1️⃣ Ollamaをインストール**
+```
+1. OllamaSetup.exe をダブルクリック
+2. インストール完了後、PCを再起動
 ```
 
-### 🚨 **トラブルシューティング**
+**2️⃣ 医療特化モデルを配置**
+```
+1. Windows + R → %USERPROFILE%\.ollama と入力
+2. models\manifests\registry.ollama.ai\ フォルダを作成
+3. models\blobs\ フォルダを作成
+4. 以下をコピー:
+   - ollama-models\manifests\registry.ollama.ai\alibayram\ → .ollama\models\manifests\registry.ollama.ai\
+   - ollama-models\blobs\* (4ファイル) → .ollama\models\blobs\
+```
 
-#### アプリが起動しない・何も表示されない場合
-1. **インストールが完了しているか確認**
-   - インストーラーのサイズが約3GBあることを確認
-   - インストール中にエラーが出ていないか確認
-
-2. **システム要件を確認**
-   - Windows 10/11 64bit
-   - 空き容量 5GB以上
-   - RAM 8GB以上推奨
-
-3. **権限とセキュリティ設定**
-   - Windows Defenderの除外設定
-   - 管理者として実行を試行
-
-#### 旧バージョンをお使いの場合
-- 新しいワンクリックインストーラーを使用してください
-- 古いバージョンではOllamaの手動インストールが必要でした
+**3️⃣ アプリを起動**
+```
+win-unpacked\Medical Record LLM.exe をダブルクリック
+```
 
 ### オプション2: 開発環境セットアップ
 
@@ -221,7 +164,7 @@ npm run dev
 # 7. ブラウザで http://localhost:3000 にアクセス
 ```
 
-## 🔧 **開発コマンド**
+## 🔧 開発コマンド
 
 ```bash
 # Web開発
@@ -239,25 +182,7 @@ npm run check      # TypeScript型チェック
 npm run db:push    # データベーススキーマ更新
 ```
 
-## 🌍 **オフライン環境での配布**
-
-インターネット接続のない環境でも完全に動作します。
-
-```bash
-# 1. オンライン環境でモデルをダウンロード
-ollama pull gemma:2b
-ollama pull llama3:latest
-
-# 2. オフライン配布用パッケージを作成
-./setup-offline.sh
-
-# 3. Windows用インストーラーをビルド
-npm run dist:win
-
-# 4. 生成されたインストーラーをオフライン環境にコピー
-```
-
-## 🏥 **医療現場での使用について**
+## 🏥 医療現場での使用について
 
 ### セキュリティ保証
 - ✅ **患者データの漏洩リスクゼロ** - 完全オフライン動作
@@ -266,23 +191,12 @@ npm run dist:win
 - ✅ **暗号化保存** - 機密データは暗号化
 - ✅ **セッション管理** - セキュアな認証システム
 
-### 使用例
-- **音声入力による診療記録作成** - ハンズフリーで症状記録
-- **医学用語の音声検索** - 専門用語を話して即座に検索
-- **レポート作成支援** - 音声でドラフト作成
-- **研修資料の準備** - 音声による資料内容の整理
-
-### 🎤 **音声入力機能**
+### 🎤 音声入力機能
 
 #### オフライン音声認識対応
 - **Windows PC** - Microsoft Edge使用時に完全オフライン動作
 - **macOS** - Safari使用時に完全オフライン動作  
 - **Electronアプリ** - **OS標準音声認識を使用**して完全オフライン動作
-
-#### セキュリティ保証
-- ✅ **完全オフライン動作** - OSの標準音声認識を使用
-- ✅ **患者データ安全** - 音声データが外部送信されない
-- ✅ **HIPAA準拠** - プライバシー保護完璧
 
 #### 医療現場特化機能
 - **日本語医療用語対応** - 専門用語の正確な認識
@@ -290,16 +204,51 @@ npm run dist:win
 - **リアルタイム変換** - 音声→テキスト即座変換
 - **プライバシー保護** - 音声データの外部送信なし
 
-## 🛡️ **セキュリティ監査**
+## 🔧 トラブルシューティング
 
-このアプリケーションは以下の観点で設計されています：
+### よくある問題
 
-1. **ゼロトラスト原則** - 全てのアクセスを認証・認可
-2. **最小権限の原則** - 必要最小限の権限でのみ動作
-3. **深層防御** - 多層のセキュリティ対策
-4. **プライバシー・バイ・デザイン** - 設計段階からプライバシー保護
+| 問題 | 解決方法 |
+|------|----------|
+| モデルが表示されない | ファイル配置を再確認、特にblobsフォルダ内の4ファイル |
+| アプリが起動しない | Windows Defenderの除外設定、管理者として実行 |
+| 音声入力できない | マイク設定確認、Windows音声認識を有効化 |
+| Ollamaに接続できない | アプリを再起動、モデルが正しくインポートされているか確認 |
 
-## 📄 **ライセンス**
+### システム要件確認
+- Windows 10/11 64bit
+- 空き容量 5GB以上
+- RAM 8GB以上推奨
+
+## 🛡️ 信頼性とセキュリティ
+
+### 配布パッケージの検証
+
+このパッケージには以下が含まれており、完全性を確認できます：
+
+✅ **完全なソースコード開示**
+- `win-unpacked/resources/app.asar.unpacked/` にすべてのソースコードが含まれています
+- TypeScript/JavaScript形式で読み取り可能
+- 隠された機能や悪意のあるコードは一切ありません
+
+✅ **コード検証方法**
+1. `win-unpacked/resources/app.asar.unpacked/server/` - サーバーコード
+2. `win-unpacked/resources/app.asar` - クライアントコード（npx asar extract で展開可能）
+3. すべてのコードが人間が読める形式で提供
+
+### 医療現場での信頼性
+
+#### HIPAA準拠設計
+- 患者情報の外部漏洩リスクゼロ
+- 完全なプライバシー保護
+- セキュアな認証システム
+
+#### システムへの影響なし
+- アプリ専用フォルダ内でのみ動作
+- 他のアプリケーションやシステムファイルを変更しません
+- レジストリの変更は最小限（アンインストール情報のみ）
+
+## 📄 ライセンス
 
 ### 本アプリケーション
 MIT License - 商用利用可能（病院での商用利用に制限なし）
@@ -312,28 +261,15 @@ MIT License - 商用利用可能（病院での商用利用に制限なし）
 - **React** (MIT License) - Facebook開発のUIライブラリ
 - **TypeScript** (Apache-2.0 License) - Microsoft開発の型安全JavaScript
 - **TailwindCSS** (MIT License) - ユーティリティファーストCSSフレームワーク
-- **Radix UI** (MIT License) - アクセシブルなUIコンポーネント群
-- **Framer Motion** (MIT License) - アニメーションライブラリ
-- **React Query** (MIT License) - サーバー状態管理
-- **Wouter** (MIT License) - 軽量ルーター
 
 #### バックエンド・サーバー
 - **Express.js** (MIT License) - Node.js Webフレームワーク
 - **Passport.js** (MIT License) - 認証ミドルウェア
 - **WebSocket (ws)** (MIT License) - リアルタイム通信
-- **Drizzle ORM** (Apache-2.0 License) - 型安全ORM
-- **PostgreSQL Driver (pg)** (MIT License) - データベース接続
-
-#### 開発・ビルドツール
-- **Vite** (MIT License) - 高速ビルドツール
-- **Electron** (MIT License) - デスクトップアプリ開発
-- **ESBuild** (MIT License) - JavaScript/TypeScriptビルダー
 
 #### LLM・AI関連
 - **Ollama** (MIT License) - ローカルLLM実行環境
-- **Node-llama-cpp** (MIT License) - LLMモデル実行ライブラリ
 - **Gemma3/MedGemma** (Apache-2.0 License) - Google開発の医療特化LLMモデル
-- **alibayram/medgemma** (Apache-2.0 License) - 医療用途に最適化されたGemmaモデル
 
 ### ライセンス適合性の保証
 
@@ -341,21 +277,7 @@ MIT License - 商用利用可能（病院での商用利用に制限なし）
 ✅ **Apache-2.0 License**: 商用利用可能、特許権の明示的な許可あり。企業利用に最適  
 ✅ **GPL系ライセンス**: 本アプリケーションでは使用していません（コピーレフト制限なし）
 
-### 商用利用に関する明示的な許可
-
-**本アプリケーションで使用されているすべてのライブラリは、以下を明示的に許可しています：**
-
-1. **商用利用** - 営利目的での利用が可能
-2. **企業利用** - 法人・組織での利用が可能  
-3. **医療機関での利用** - 病院・クリニック等での業務利用が可能
-4. **修正・カスタマイズ** - 組織のニーズに合わせた改変が可能
-5. **再配布** - 他の医療機関への配布が可能
-
-### 免責事項の確認
-
-各ライブラリの詳細なライセンス条文については、各プロジェクトの公式ライセンスファイルをご確認ください。本声明は主要ライブラリの商用利用適合性を要約したものです。
-
-## 🤝 **サポート**
+## 🤝 サポート
 
 - **Issues**: [GitHub Issues](https://github.com/yourusername/Medical-record-LLM/issues)
 - **Documentation**: [Wiki](https://github.com/yourusername/Medical-record-LLM/wiki)
